@@ -21,10 +21,18 @@ Read the King James Bible on Repebble core devices. Bibble downloads the KJV tex
 
 ## Example Screens
 
-Capture final screenshots before submission:
+Four high-impact screens are captured for each supported platform: book grid, chapter grid, verse grid, and reader.
 
-1. Book grid
-2. Chapter grid
-3. Verse grid
-4. Reader
-5. Dictation result
+### Emery
+
+1. ![Emery book grid](./screenshots/emery/01-book-grid.png)
+2. ![Emery chapter grid](./screenshots/emery/02-chapter-grid.png)
+3. ![Emery verse grid](./screenshots/emery/03-verse-grid.png)
+4. ![Emery reader](./screenshots/emery/04-reader.png)
+
+### Gabbro
+
+1. ![Gabbro book grid](./screenshots/gabbro/01-book-grid.png)
+2. ![Gabbro chapter grid](./screenshots/gabbro/02-chapter-grid.png)
+3. ![Gabbro verse grid](./screenshots/gabbro/03-verse-grid.png)
+4. ![Gabbro reader](./screenshots/gabbro/04-reader.png)

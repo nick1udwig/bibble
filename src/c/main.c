@@ -15,11 +15,17 @@
 #define BIBBLE_GRID_COLUMNS 3
 #define BIBBLE_GRID_CELL_HEIGHT 34
 #define BIBBLE_GRID_STATUS_HEIGHT 20
+#define BIBBLE_ROUND_GRID_SIDE_INSET 30
+#define BIBBLE_ROUND_GRID_TOP_INSET 20
+#define BIBBLE_ROUND_GRID_BOTTOM_GAP 4
 #define BIBBLE_TOUCH_TAP_MAX_PX 15
 #define BIBBLE_TOUCH_SWIPE_MIN_PX 40
 #define BIBBLE_READER_FOOTER_HEIGHT 20
 #define BIBBLE_READER_TEXT_PADDING 4
 #define BIBBLE_READER_TEXT_MEASURE_HEIGHT 24000
+#define BIBBLE_ROUND_READER_SIDE_INSET 30
+#define BIBBLE_ROUND_READER_TOP_INSET 30
+#define BIBBLE_ROUND_READER_BOTTOM_GAP 10
 #define BIBBLE_READY_DELAY_MS 300
 #define BIBBLE_PAGE_REQUEST_DELAY_MS 120
 #define BIBBLE_SELECT_HOLD_MS 700
@@ -112,6 +118,28 @@ static void prv_copy_string(char *dest, size_t dest_size, const char *src) {
     return;
   }
   snprintf(dest, dest_size, "%s", src ? src : "");
+}
+
+static GRect prv_grid_frame_for_bounds(GRect bounds) {
+#if defined(PBL_ROUND)
+  return GRect(BIBBLE_ROUND_GRID_SIDE_INSET, BIBBLE_ROUND_GRID_TOP_INSET,
+               bounds.size.w - (BIBBLE_ROUND_GRID_SIDE_INSET * 2),
+               bounds.size.h - BIBBLE_GRID_STATUS_HEIGHT - BIBBLE_ROUND_GRID_TOP_INSET -
+                   BIBBLE_ROUND_GRID_BOTTOM_GAP);
+#else
+  return GRect(0, 0, bounds.size.w, bounds.size.h - BIBBLE_GRID_STATUS_HEIGHT);
+#endif
+}
+
+static GRect prv_reader_body_frame_for_bounds(GRect bounds) {
+#if defined(PBL_ROUND)
+  return GRect(BIBBLE_ROUND_READER_SIDE_INSET, BIBBLE_ROUND_READER_TOP_INSET,
+               bounds.size.w - (BIBBLE_ROUND_READER_SIDE_INSET * 2),
+               bounds.size.h - BIBBLE_READER_FOOTER_HEIGHT - BIBBLE_ROUND_READER_TOP_INSET -
+                   BIBBLE_ROUND_READER_BOTTOM_GAP);
+#else
+  return GRect(4, 4, bounds.size.w - 8, bounds.size.h - BIBBLE_READER_FOOTER_HEIGHT - 8);
+#endif
 }
 
 static void prv_copy_payload_field(char *dest, size_t dest_size, const char *src) {
@@ -521,6 +549,18 @@ static void prv_grid_draw(BibbleGridKind kind, Layer *layer, GContext *ctx) {
   uint16_t count = prv_grid_item_count(kind);
   uint16_t selected = prv_grid_selected_index(kind);
   uint16_t index;
+#if defined(PBL_ROUND)
+  ScrollLayer *scroll_layer = prv_grid_scroll_layer(kind);
+  int visible_top = 0;
+  int visible_bottom = bounds.size.h;
+
+  if (scroll_layer) {
+    GPoint offset = scroll_layer_get_content_offset(scroll_layer);
+    GRect scroll_bounds = layer_get_bounds(scroll_layer_get_layer(scroll_layer));
+    visible_top = -offset.y;
+    visible_bottom = visible_top + scroll_bounds.size.h;
+  }
+#endif
 
   graphics_context_set_fill_color(ctx, GColorWhite);
   graphics_fill_rect(ctx, bounds, 0, GCornerNone);
@@ -529,11 +569,21 @@ static void prv_grid_draw(BibbleGridKind kind, Layer *layer, GContext *ctx) {
     char label[8];
     uint8_t col = index % BIBBLE_GRID_COLUMNS;
     uint16_t row = index / BIBBLE_GRID_COLUMNS;
+    int16_t cell_top = row * BIBBLE_GRID_CELL_HEIGHT;
+#if defined(PBL_ROUND)
+    int16_t cell_bottom = cell_top + BIBBLE_GRID_CELL_HEIGHT;
+#endif
     int16_t x = (bounds.size.w * col) / BIBBLE_GRID_COLUMNS;
     int16_t next_x = (bounds.size.w * (col + 1)) / BIBBLE_GRID_COLUMNS;
-    GRect cell = GRect(x, row * BIBBLE_GRID_CELL_HEIGHT, next_x - x, BIBBLE_GRID_CELL_HEIGHT);
+    GRect cell = GRect(x, cell_top, next_x - x, BIBBLE_GRID_CELL_HEIGHT);
     GRect text_frame = GRect(cell.origin.x + 1, cell.origin.y + 2, cell.size.w - 2, cell.size.h - 4);
     bool is_selected = index == selected;
+
+#if defined(PBL_ROUND)
+    if (cell_top < visible_top || cell_bottom > visible_bottom) {
+      continue;
+    }
+#endif
 
     if (is_selected) {
       graphics_context_set_fill_color(ctx, GColorBlack);
@@ -568,11 +618,12 @@ static void prv_grid_window_load_common(Window *window, BibbleGridKind kind, Scr
   Layer *root = window_get_root_layer(window);
   GRect bounds = layer_get_bounds(root);
   GRect status_frame = GRect(0, bounds.size.h - BIBBLE_GRID_STATUS_HEIGHT, bounds.size.w, BIBBLE_GRID_STATUS_HEIGHT);
-  GRect grid_frame = GRect(0, 0, bounds.size.w, bounds.size.h - BIBBLE_GRID_STATUS_HEIGHT);
+  GRect grid_frame = prv_grid_frame_for_bounds(bounds);
   int content_height = prv_grid_content_height(kind, grid_frame.size.h);
 
   *scroll_out = scroll_layer_create(grid_frame);
   scroll_layer_set_shadow_hidden(*scroll_out, true);
+  layer_set_clips(scroll_layer_get_layer(*scroll_out), true);
   layer_add_child(root, scroll_layer_get_layer(*scroll_out));
 
   *grid_out = layer_create(GRect(0, 0, grid_frame.size.w, content_height));
@@ -789,10 +840,11 @@ static void prv_reader_window_load(Window *window) {
   Layer *root = window_get_root_layer(window);
   GRect bounds = layer_get_bounds(root);
   GRect footer_frame = GRect(0, bounds.size.h - BIBBLE_READER_FOOTER_HEIGHT, bounds.size.w, BIBBLE_READER_FOOTER_HEIGHT);
-  GRect body_frame = GRect(4, 4, bounds.size.w - 8, bounds.size.h - BIBBLE_READER_FOOTER_HEIGHT - 8);
+  GRect body_frame = prv_reader_body_frame_for_bounds(bounds);
 
   s_reader_scroll_layer = scroll_layer_create(body_frame);
   scroll_layer_set_shadow_hidden(s_reader_scroll_layer, true);
+  layer_set_clips(scroll_layer_get_layer(s_reader_scroll_layer), true);
   scroll_layer_set_callbacks(s_reader_scroll_layer, (ScrollLayerCallbacks) {
     .click_config_provider = prv_reader_click_config_provider,
   });
