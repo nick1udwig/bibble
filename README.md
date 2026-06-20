@@ -4,6 +4,8 @@ KJV Bible reader for Repebble core devices.
 
 The native watch app is C. PKJS downloads the KJV text at startup, keeps it in phone-side state, owns reference parsing, chapter paging, and a page cache; the watch requests one page at a time over AppMessage.
 
+Publishing metadata and app icon assets are in [`docs/publishing.md`](docs/publishing.md).
+
 ## Build
 
 ```sh

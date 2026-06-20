@@ -2,11 +2,13 @@
   "name": "bibble",
   "author": "Nick",
   "version": "0.1.0",
-  "description": "KJV Bible reader for Repebble core devices.",
+  "description": "Read the King James Bible on Repebble core devices.",
   "keywords": [
     "pebble-app",
     "bible",
-    "kjv"
+    "kjv",
+    "reader",
+    "scripture"
   ],
   "private": true,
   "scripts": {
@@ -36,7 +38,14 @@
       "Payload": 1
     },
     "resources": {
-      "media": []
+      "media": [
+        {
+          "name": "APP_ICON",
+          "type": "bitmap",
+          "file": "bibble-menu-icon.png",
+          "menuIcon": true
+        }
+      ]
     }
   }
 }
