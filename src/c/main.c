@@ -56,6 +56,8 @@ static DictationSession *s_dictation_session;
 #endif
 
 static char s_status[BIBBLE_STATUS_LENGTH] = "Select a book";
+static char s_chapter_status[BIBBLE_STATUS_LENGTH] = "";
+static char s_verse_status[BIBBLE_STATUS_LENGTH] = "";
 static char s_reader_text[BIBBLE_READER_TEXT_LENGTH] = "";
 static char s_current_reference[BIBBLE_REF_LENGTH] = "";
 static uint8_t s_selected_book;
@@ -89,6 +91,7 @@ typedef enum {
 
 static void prv_set_status(const char *status);
 static void prv_update_status_layers(void);
+static void prv_update_active_status_layer(void);
 static void prv_update_reader_layers(bool reset_scroll);
 static bool prv_send_message(const char *type, const char *payload);
 static void prv_request_page(uint8_t book, uint8_t chapter, uint8_t verse, uint16_t page);
@@ -181,27 +184,59 @@ static const char *const BIBBLE_BOOK_SHORT_NAMES[BIBBLE_BOOK_COUNT] = {
   "2Pe", "1Jn", "2Jn", "3Jn", "Jud", "Rev"
 };
 
-static void prv_format_reference(char *dest, size_t dest_size, uint8_t book, uint8_t chapter, uint8_t verse) {
+static void prv_format_chapter_reference(char *dest, size_t dest_size, uint8_t book, uint8_t chapter) {
   if (book >= BIBBLE_BOOK_COUNT) {
     prv_copy_string(dest, dest_size, "");
     return;
   }
-  snprintf(dest, dest_size, "%s %u:%u", BIBBLE_BOOK_NAMES[book], chapter, verse);
+  snprintf(dest, dest_size, "%s %u", BIBBLE_BOOK_NAMES[book], chapter);
 }
 
 static void prv_set_status(const char *status) {
   prv_copy_string(s_status, sizeof(s_status), status);
-  prv_update_status_layers();
+  prv_update_active_status_layer();
+}
+
+static void prv_format_chapter_status(void) {
+  if (s_selected_book < BIBBLE_BOOK_COUNT) {
+    prv_copy_string(s_chapter_status, sizeof(s_chapter_status), BIBBLE_BOOK_NAMES[s_selected_book]);
+  } else {
+    prv_copy_string(s_chapter_status, sizeof(s_chapter_status), "Select a chapter");
+  }
+}
+
+static void prv_format_verse_status(void) {
+  if (s_selected_book < BIBBLE_BOOK_COUNT && s_selected_chapter >= 1 &&
+      s_selected_chapter <= prv_chapter_count(s_selected_book)) {
+    snprintf(s_verse_status, sizeof(s_verse_status), "%s %u", BIBBLE_BOOK_NAMES[s_selected_book],
+             s_selected_chapter);
+  } else {
+    prv_copy_string(s_verse_status, sizeof(s_verse_status), "Select a verse");
+  }
 }
 
 static void prv_update_status_layers(void) {
   if (s_book_status_layer) {
-    text_layer_set_text(s_book_status_layer, s_status);
+    text_layer_set_text(s_book_status_layer, "Select a book");
   }
   if (s_chapter_status_layer) {
-    text_layer_set_text(s_chapter_status_layer, s_status);
+    prv_format_chapter_status();
+    text_layer_set_text(s_chapter_status_layer, s_chapter_status);
   }
   if (s_verse_status_layer) {
+    prv_format_verse_status();
+    text_layer_set_text(s_verse_status_layer, s_verse_status);
+  }
+}
+
+static void prv_update_active_status_layer(void) {
+  Window *top = window_stack_get_top_window();
+
+  if (top == s_book_window && s_book_status_layer) {
+    text_layer_set_text(s_book_status_layer, s_status);
+  } else if (top == s_chapter_window && s_chapter_status_layer) {
+    text_layer_set_text(s_chapter_status_layer, s_status);
+  } else if (top == s_verse_window && s_verse_status_layer) {
     text_layer_set_text(s_verse_status_layer, s_status);
   }
 }
@@ -548,10 +583,10 @@ static void prv_grid_window_load_common(Window *window, BibbleGridKind kind, Scr
   *status_out = text_layer_create(status_frame);
   text_layer_set_font(*status_out, fonts_get_system_font(FONT_KEY_GOTHIC_14));
   text_layer_set_text_alignment(*status_out, GTextAlignmentCenter);
-  text_layer_set_text(*status_out, s_status);
   layer_add_child(root, text_layer_get_layer(*status_out));
 
   window_set_click_config_provider(window, prv_grid_click_config_provider);
+  prv_update_status_layers();
   prv_grid_ensure_selected_visible(kind, false);
 }
 
@@ -580,6 +615,11 @@ static void prv_book_window_load(Window *window) {
   }
 }
 
+static void prv_book_window_appear(Window *window) {
+  (void)window;
+  prv_update_status_layers();
+}
+
 static void prv_book_window_unload(Window *window) {
   (void)window;
   if (s_touch_subscribed) {
@@ -594,6 +634,11 @@ static void prv_chapter_window_load(Window *window) {
                               &s_chapter_status_layer, prv_chapter_grid_update_proc);
 }
 
+static void prv_chapter_window_appear(Window *window) {
+  (void)window;
+  prv_update_status_layers();
+}
+
 static void prv_chapter_window_unload(Window *window) {
   (void)window;
   prv_grid_window_unload_common(&s_chapter_scroll_layer, &s_chapter_grid_layer, &s_chapter_status_layer);
@@ -602,6 +647,11 @@ static void prv_chapter_window_unload(Window *window) {
 static void prv_verse_window_load(Window *window) {
   prv_grid_window_load_common(window, BibbleGridKindVerse, &s_verse_scroll_layer, &s_verse_grid_layer,
                               &s_verse_status_layer, prv_verse_grid_update_proc);
+}
+
+static void prv_verse_window_appear(Window *window) {
+  (void)window;
+  prv_update_status_layers();
 }
 
 static void prv_verse_window_unload(Window *window) {
@@ -628,12 +678,13 @@ static void prv_show_chapter_window(uint8_t book, uint8_t chapter) {
   s_selected_chapter = chapter;
   s_selected_chapter_index = chapter - 1;
   s_selected_verse_index = 0;
-  prv_set_status(BIBBLE_BOOK_NAMES[book]);
+  prv_update_status_layers();
 
   if (!s_chapter_window) {
     s_chapter_window = window_create();
     window_set_window_handlers(s_chapter_window, (WindowHandlers){
       .load = prv_chapter_window_load,
+      .appear = prv_chapter_window_appear,
       .unload = prv_chapter_window_unload,
     });
   }
@@ -656,7 +707,6 @@ static void prv_show_chapter_window(uint8_t book, uint8_t chapter) {
 static void prv_show_verse_window(uint8_t book, uint8_t chapter, uint8_t verse) {
   Window *top = window_stack_get_top_window();
   uint8_t verse_count;
-  char status[64];
 
   if (book >= BIBBLE_BOOK_COUNT || chapter < 1 || chapter > prv_chapter_count(book)) {
     return;
@@ -672,13 +722,13 @@ static void prv_show_verse_window(uint8_t book, uint8_t chapter, uint8_t verse) 
     verse = verse_count;
   }
   s_selected_verse_index = verse - 1;
-  snprintf(status, sizeof(status), "%s %u", BIBBLE_BOOK_NAMES[book], chapter);
-  prv_set_status(status);
+  prv_update_status_layers();
 
   if (!s_verse_window) {
     s_verse_window = window_create();
     window_set_window_handlers(s_verse_window, (WindowHandlers){
       .load = prv_verse_window_load,
+      .appear = prv_verse_window_appear,
       .unload = prv_verse_window_unload,
     });
   }
@@ -701,7 +751,6 @@ static void prv_update_reader_layers(bool reset_scroll) {
   GRect body_frame;
   GSize text_size;
   int16_t content_height;
-  char footer[96];
 
   if (!s_reader_scroll_layer || !s_reader_body_layer) {
     return;
@@ -732,8 +781,7 @@ static void prv_update_reader_layers(bool reset_scroll) {
   }
 
   if (s_reader_footer_layer) {
-    snprintf(footer, sizeof(footer), "%s p%u/%u", s_current_reference, s_current_page, s_page_count);
-    text_layer_set_text(s_reader_footer_layer, footer);
+    text_layer_set_text(s_reader_footer_layer, s_current_reference);
   }
 }
 
@@ -759,6 +807,8 @@ static void prv_reader_window_load(Window *window) {
 
   s_reader_footer_layer = text_layer_create(footer_frame);
   text_layer_set_font(s_reader_footer_layer, fonts_get_system_font(FONT_KEY_GOTHIC_14));
+  text_layer_set_background_color(s_reader_footer_layer, GColorBlack);
+  text_layer_set_text_color(s_reader_footer_layer, GColorWhite);
   text_layer_set_text_alignment(s_reader_footer_layer, GTextAlignmentCenter);
   layer_add_child(root, text_layer_get_layer(s_reader_footer_layer));
 
@@ -788,7 +838,7 @@ static void prv_show_reader_window(uint8_t book, uint8_t chapter, uint8_t verse,
   s_current_verse = verse;
   s_current_page = 1;
   s_page_count = 1;
-  prv_format_reference(s_current_reference, sizeof(s_current_reference), book, chapter, verse);
+  prv_format_chapter_reference(s_current_reference, sizeof(s_current_reference), book, chapter);
   s_reader_text[0] = '\0';
   s_reader_loading = request_page;
 
@@ -1098,7 +1148,7 @@ static void prv_handle_page(const char *payload) {
   s_current_page = page ? page : 1;
   s_page_count = page_count ? page_count : 1;
   s_reader_loading = false;
-  prv_format_reference(s_current_reference, sizeof(s_current_reference), book, chapter, s_current_verse);
+  prv_format_chapter_reference(s_current_reference, sizeof(s_current_reference), book, chapter);
   prv_copy_string(s_reader_text, sizeof(s_reader_text), text && text[0] ? text : "No text");
   prv_update_reader_layers(true);
 }
@@ -1139,7 +1189,11 @@ static void prv_inbox_received(DictionaryIterator *iter, void *context) {
   (void)context;
 
   if (strcmp(type, BIBBLE_MSG_STATUS) == 0) {
-    prv_set_status(payload[0] ? payload : "Ready");
+    if (payload[0] && strcmp(payload, "Select a book") != 0) {
+      prv_set_status(payload);
+    } else {
+      prv_update_status_layers();
+    }
   } else if (strcmp(type, BIBBLE_MSG_PAGE) == 0) {
     prv_handle_page(payload);
   } else if (strcmp(type, BIBBLE_MSG_NAVIGATE) == 0) {
@@ -1348,6 +1402,7 @@ static void prv_init(void) {
   s_book_window = window_create();
   window_set_window_handlers(s_book_window, (WindowHandlers){
     .load = prv_book_window_load,
+    .appear = prv_book_window_appear,
     .unload = prv_book_window_unload,
   });
   window_stack_push(s_book_window, true);
