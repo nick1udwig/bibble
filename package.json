@@ -1,0 +1,42 @@
+{
+  "name": "bibble",
+  "author": "Nick",
+  "version": "0.1.0",
+  "description": "KJV Bible reader for Repebble core devices.",
+  "keywords": [
+    "pebble-app",
+    "bible",
+    "kjv"
+  ],
+  "private": true,
+  "scripts": {
+    "fetch:kjv": "curl -sL -o /tmp/bibble-kjv.json https://raw.githubusercontent.com/thiagobodruk/bible/master/json/en_kjv.json",
+    "generate:data": "node scripts/generate-kjv-data.mjs /tmp/bibble-kjv.json",
+    "test": "node tests/parser.test.js",
+    "build:watch": "pebble build",
+    "build:watch:release": "npm run build:watch && bash scripts/strip-pbw-sourcemap.sh",
+    "deploy:phone": "bash scripts/build-and-install-phone.sh"
+  },
+  "dependencies": {},
+  "devDependencies": {},
+  "pebble": {
+    "displayName": "Bibble",
+    "uuid": "879b9765-84be-48dd-b48c-f27fb2b3ac08",
+    "sdkVersion": "3",
+    "enableMultiJS": true,
+    "targetPlatforms": [
+      "emery",
+      "gabbro"
+    ],
+    "watchapp": {
+      "watchface": false
+    },
+    "messageKeys": {
+      "MessageType": 0,
+      "Payload": 1
+    },
+    "resources": {
+      "media": []
+    }
+  }
+}
