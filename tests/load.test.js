@@ -5,6 +5,10 @@ var helpers = require("./helpers");
 var freshBible = helpers.freshBible;
 var testBooks = helpers.testBooks;
 
+var unloadedBible = freshBible();
+assert.strictEqual(unloadedBible.isLoaded(), false, "KJV text should not be bundled at initial load");
+assert.strictEqual(unloadedBible.loadState(), "idle");
+
 function withXmlHttpRequest(mock, work) {
   var previous = global.XMLHttpRequest;
   global.XMLHttpRequest = mock;
