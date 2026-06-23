@@ -1,8 +1,26 @@
 "use strict";
 
 var assert = require("assert");
-var fs = require("fs");
 var Bible = require("../src/pkjs/bible");
+var KJV_META = require("../src/pkjs/bible-meta");
+
+function testBooks() {
+  return KJV_META.map(function(book) {
+    return {
+      abbrev: book.abbrev,
+      chapters: book.verseCounts.map(function(verseCount, chapterIndex) {
+        var chapter = chapterIndex + 1;
+        var verses = [];
+        var verse;
+
+        for (verse = 1; verse <= verseCount; verse += 1) {
+          verses.push(book.name + " " + String(chapter) + ":" + String(verse));
+        }
+        return verses;
+      })
+    };
+  });
+}
 
 function ref(input, bookName, chapter, verse) {
   var parsed = Bible.parseReference(input);
@@ -36,7 +54,7 @@ fail("somewhere around breakfast");
 fail("John 99");
 
 assert.strictEqual(Bible.isLoaded(), false, "KJV text should not be bundled at initial load");
-Bible.loadFromJsonText(fs.readFileSync("/tmp/bibble-kjv.json", "utf8"));
+Bible.loadFromBooks(testBooks());
 assert.strictEqual(Bible.isLoaded(), true, "KJV text should load into PKJS state");
 
 var page = Bible.getChapterPage(42, 3, 16, 0);
