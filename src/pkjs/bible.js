@@ -553,6 +553,7 @@ function resolveNumbers(bookIndex, numbers, explicitVerse) {
   var chapter;
   var verse;
   var combinedChapter;
+  var combinedVerse;
 
   if (!numbers.length) {
     return {
@@ -573,6 +574,16 @@ function resolveNumbers(bookIndex, numbers, explicitVerse) {
     verse = numbers[1];
     combinedChapter = parseInt(String(numbers[0]) + (numbers[1] < 10 ? "0" : "") + String(numbers[1]), 10);
     if (explicitVerse && numbers.length > 2 && !isValidVerse(bookIndex, chapter, verse) &&
+        numbers.length > 3 && isValidChapter(bookIndex, combinedChapter)) {
+      combinedVerse = combineNumberParts(numbers[2], numbers[3]);
+      if (isValidVerse(bookIndex, combinedChapter, combinedVerse)) {
+        chapter = combinedChapter;
+        verse = combinedVerse;
+      } else if (isValidVerse(bookIndex, combinedChapter, numbers[2])) {
+        chapter = combinedChapter;
+        verse = numbers[2];
+      }
+    } else if (explicitVerse && numbers.length > 2 && !isValidVerse(bookIndex, chapter, verse) &&
         isValidVerse(bookIndex, combinedChapter, numbers[2])) {
       chapter = combinedChapter;
       verse = numbers[2];
@@ -600,6 +611,10 @@ function resolveNumbers(bookIndex, numbers, explicitVerse) {
     chapter: chapter,
     verse: verse
   };
+}
+
+function combineNumberParts(left, right) {
+  return parseInt(String(left) + String(right), 10);
 }
 
 function formatReference(bookIndex, chapter, verse) {

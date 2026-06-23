@@ -68,6 +68,8 @@ ref("psalm first oh first", "Psalms", 101, 1);
 ref("psalm one twenty verse three", "Psalms", 120, 3);
 ref("psalm one twenty three verse four", "Psalms", 123, 4);
 ref("psalm one oh one verse five", "Psalms", 101, 5);
+ref("psalm one nineteen verse one hundred seventy six", "Psalms", 119, 176);
+ref("psalm one nineteen verse one seventy six", "Psalms", 119, 176);
 ref("john twenty one", "John", 21, 1);
 fail("somewhere around breakfast");
 fail("John 99");
