@@ -21,7 +21,7 @@ var MANUAL_ALIASES = {
   13: ["2 chron", "2 chronicles", "second chronicles", "two chronicles"],
   15: ["neh"],
   17: ["jobe"],
-  18: ["psalm", "psalms", "ps", "psa", "salms", "songs"],
+  18: ["psalm", "psalms", "ps", "psa", "salm", "salms", "soulm", "soulms", "songs"],
   19: ["prov", "proverbs"],
   20: ["eccl", "ecclesiastes"],
   21: ["song", "song of songs", "song of solomon", "songs of solomon", "canticles"],
