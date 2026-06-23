@@ -92,4 +92,8 @@ assert.strictEqual(invalidPrevious.bookName, "Genesis");
 assert.strictEqual(invalidPrevious.chapter, 1);
 assert.strictEqual(invalidPrevious.page, 1);
 
+var sameChapter = Bible.getAdjacentPage(42, 3, 999, 0);
+assert.strictEqual(sameChapter.bookName, "John");
+assert.strictEqual(sameChapter.chapter, 3);
+
 console.log("parser tests passed");
