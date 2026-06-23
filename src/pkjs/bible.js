@@ -238,6 +238,12 @@ function flushLoadCallbacks(error) {
   }
 }
 
+function failLoad(message) {
+  loadStateValue = "error";
+  loadError = message;
+  flushLoadCallbacks(loadError);
+}
+
 function ensureLoaded(callback) {
   var request;
 
@@ -259,14 +265,18 @@ function ensureLoaded(callback) {
   loadError = "";
 
   if (typeof XMLHttpRequest === "undefined") {
-    loadStateValue = "error";
-    loadError = "Network unavailable";
-    flushLoadCallbacks(loadError);
+    failLoad("Network unavailable");
     return;
   }
 
-  request = new XMLHttpRequest();
-  request.open("GET", KJV_SOURCE_URL, true);
+  try {
+    request = new XMLHttpRequest();
+    request.open("GET", KJV_SOURCE_URL, true);
+  } catch (_) {
+    failLoad("KJV download failed");
+    return;
+  }
+
   request.onreadystatechange = function() {
     if (request.readyState !== 4) {
       return;
@@ -277,18 +287,18 @@ function ensureLoaded(callback) {
         loadFromJsonText(request.responseText);
         flushLoadCallbacks(null);
       } catch (error) {
-        loadStateValue = "error";
-        loadError = error && error.message ? error.message : "KJV parse failed";
-        flushLoadCallbacks(loadError);
+        failLoad(error && error.message ? error.message : "KJV parse failed");
       }
       return;
     }
 
-    loadStateValue = "error";
-    loadError = "KJV download failed";
-    flushLoadCallbacks(loadError);
+    failLoad("KJV download failed");
   };
-  request.send();
+  try {
+    request.send();
+  } catch (_) {
+    failLoad("KJV download failed");
+  }
 }
 
 function isLoaded() {

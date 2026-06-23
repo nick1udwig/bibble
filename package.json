@@ -14,7 +14,7 @@
   "scripts": {
     "fetch:kjv": "curl -sL -o /tmp/bibble-kjv.json https://raw.githubusercontent.com/thiagobodruk/bible/master/json/en_kjv.json",
     "generate:data": "node scripts/generate-kjv-data.mjs /tmp/bibble-kjv.json",
-    "test": "node tests/parser.test.js",
+    "test": "node tests/run.js",
     "build:watch": "pebble build",
     "build:watch:release": "npm run build:watch && bash scripts/strip-pbw-sourcemap.sh",
     "deploy:phone": "bash scripts/build-and-install-phone.sh"
