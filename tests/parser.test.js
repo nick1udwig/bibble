@@ -62,5 +62,7 @@ ref("psalm one nineteen verse one five", "Psalms", 119, 15);
 ref("john twenty one", "John", 21, 1);
 fail("somewhere around breakfast");
 fail("John 99");
+fail("John 3 16 17");
+fail("psalm 23 verse 4 5");
 
 console.log("parser tests passed");

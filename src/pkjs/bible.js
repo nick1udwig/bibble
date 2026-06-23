@@ -561,6 +561,7 @@ function resolveNumbers(bookIndex, numbers, explicitVerse) {
   var verse;
   var combinedChapter;
   var resolved;
+  var consumed;
 
   if (!numbers.length) {
     return {
@@ -573,25 +574,30 @@ function resolveNumbers(bookIndex, numbers, explicitVerse) {
   if (chapterCount(bookIndex) === 1 && numbers.length === 1) {
     chapter = 1;
     verse = numbers[0];
+    consumed = 1;
   } else if (numbers.length === 1) {
     chapter = numbers[0];
     verse = 1;
+    consumed = 1;
     if (!isValidChapter(bookIndex, chapter)) {
       resolved = resolveMergedChapterVerse(bookIndex, numbers[0]);
       if (resolved) {
         chapter = resolved.chapter;
         verse = resolved.verse;
+        consumed = resolved.consumed;
       }
     }
   } else {
     chapter = numbers[0];
     verse = numbers[1];
+    consumed = 2;
     combinedChapter = combineChapterParts(numbers[0], numbers[1]);
     if (explicitVerse && numbers.length > 2 && !isValidVerse(bookIndex, chapter, verse)) {
       resolved = resolveSplitExplicitReference(bookIndex, combinedChapter, numbers);
       if (resolved) {
         chapter = resolved.chapter;
         verse = resolved.verse;
+        consumed = resolved.consumed;
       }
     } else if (!explicitVerse && !isValidVerse(bookIndex, chapter, verse) && isValidChapter(bookIndex, combinedChapter)) {
       chapter = combinedChapter;
@@ -609,6 +615,12 @@ function resolveNumbers(bookIndex, numbers, explicitVerse) {
     return {
       ok: false,
       error: "bad verse"
+    };
+  }
+  if (consumed < numbers.length) {
+    return {
+      ok: false,
+      error: "extra number"
     };
   }
 
@@ -639,7 +651,8 @@ function resolveMergedChapterVerse(bookIndex, value) {
       }
       match = {
         chapter: chapter,
-        verse: verse
+        verse: verse,
+        consumed: 1
       };
     }
   }
@@ -658,14 +671,16 @@ function resolveSplitExplicitReference(bookIndex, chapter, numbers) {
     if (isValidVerse(bookIndex, chapter, combinedVerse)) {
       return {
         chapter: chapter,
-        verse: combinedVerse
+        verse: combinedVerse,
+        consumed: 4
       };
     }
   }
   if (isValidVerse(bookIndex, chapter, numbers[2])) {
     return {
       chapter: chapter,
-      verse: numbers[2]
+      verse: numbers[2],
+      consumed: 3
     };
   }
   return null;
