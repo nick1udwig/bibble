@@ -36,6 +36,7 @@ function fail(input) {
 }
 
 ref("psalms 23", "Psalms", 23, 1);
+ref("the Psalm twenty three", "Psalms", 23, 1);
 ref("Psalm twenty three", "Psalms", 23, 1);
 ref("psalm 23 verse 4", "Psalms", 23, 4);
 ref("soulm twenty three", "Psalms", 23, 1);
@@ -47,6 +48,7 @@ ref("John one twenty", "John", 1, 20);
 ref("first john two one", "1 John", 2, 1);
 ref("1st Corinthians 13:4", "1 Corinthians", 13, 4);
 ref("Song of Solomon 2 1", "Song of Solomon", 2, 1);
+ref("the Song of Solomon 2 1", "Song of Solomon", 2, 1);
 ref("Jude 5", "Jude", 1, 5);
 ref("revelations twenty one four", "Revelation", 21, 4);
 ref("revelation twenty first four", "Revelation", 21, 4);
