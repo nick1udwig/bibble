@@ -817,12 +817,34 @@ function splitLongLine(line, maxLength) {
   var current = "";
   var index;
   var candidate;
+  var word;
+  var room;
 
   for (index = 0; index < words.length; index += 1) {
-    candidate = current ? current + " " + words[index] : words[index];
+    word = words[index];
+    if (word.length > maxLength) {
+      if (current) {
+        room = maxLength - current.length - 1;
+        if (room > 0) {
+          chunks.push(current + " " + word.slice(0, room));
+          word = word.slice(room);
+        } else {
+          chunks.push(current);
+        }
+        current = "";
+      }
+      while (word.length > maxLength) {
+        chunks.push(word.slice(0, maxLength));
+        word = word.slice(maxLength);
+      }
+      current = word;
+      continue;
+    }
+
+    candidate = current ? current + " " + word : word;
     if (current && candidate.length > maxLength) {
       chunks.push(current);
-      current = words[index];
+      current = word;
     } else {
       current = candidate;
     }
