@@ -55,7 +55,11 @@ function handlePageRequest(payload) {
   var verse = parsePayloadInteger(fields[2]);
   var page = parsePayloadInteger(fields[3]);
 
-  if (!Bible.isValidChapter(bookIndex, chapter)) {
+  if (
+    !Bible.isValidChapter(bookIndex, chapter) ||
+    isBadOptionalInteger(fields[2], verse) ||
+    isBadOptionalInteger(fields[3], page)
+  ) {
     sendError("Bad chapter");
     return;
   }
@@ -213,6 +217,10 @@ function parsePayloadInteger(value) {
     return NaN;
   }
   return parseInt(text, 10);
+}
+
+function isBadOptionalInteger(rawValue, parsedValue) {
+  return String(rawValue == null ? "" : rawValue).trim() !== "" && parsedValue !== parsedValue;
 }
 
 function sanitizeField(value, maxBytes) {

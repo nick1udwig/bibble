@@ -225,15 +225,25 @@ var malformedPageCalls = [];
 withPkjs({
   bible: pageBibleFake(malformedPageCalls)
 }, function(pebble) {
-  pebble.emit("appmessage", {
-    payload: {
-      MessageType: "page_request",
-      Payload: "42x|3|16|0"
-    }
+  ["42x|3|16|0", "42|3|16x|0", "42|3|16|0x"].forEach(function(payload) {
+    pebble.emit("appmessage", {
+      payload: {
+        MessageType: "page_request",
+        Payload: payload
+      }
+    });
   });
 
   assert.deepStrictEqual(malformedPageCalls, []);
   assert.deepStrictEqual(pebble.sent[0], {
+    0: "error",
+    1: "Bad chapter"
+  });
+  assert.deepStrictEqual(pebble.sent[1], {
+    0: "error",
+    1: "Bad chapter"
+  });
+  assert.deepStrictEqual(pebble.sent[2], {
     0: "error",
     1: "Bad chapter"
   });
