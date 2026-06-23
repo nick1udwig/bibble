@@ -602,6 +602,13 @@ function resolveNumbers(bookIndex, numbers, explicitVerse) {
     } else if (!explicitVerse && !isValidVerse(bookIndex, chapter, verse) && isValidChapter(bookIndex, combinedChapter)) {
       chapter = combinedChapter;
       verse = 1;
+      if (numbers.length > 2) {
+        resolved = resolveTrailingVerse(bookIndex, chapter, numbers, 2);
+        if (resolved) {
+          verse = resolved.verse;
+          consumed = resolved.consumed;
+        }
+      }
     }
   }
 
@@ -661,26 +668,31 @@ function resolveMergedChapterVerse(bookIndex, value) {
 }
 
 function resolveSplitExplicitReference(bookIndex, chapter, numbers) {
-  var combinedVerse;
-
   if (!isValidChapter(bookIndex, chapter)) {
     return null;
   }
-  if (numbers.length > 3) {
-    combinedVerse = combineNumberParts(numbers[2], numbers[3]);
+
+  return resolveTrailingVerse(bookIndex, chapter, numbers, 2);
+}
+
+function resolveTrailingVerse(bookIndex, chapter, numbers, start) {
+  var combinedVerse;
+
+  if (numbers.length > start + 1) {
+    combinedVerse = combineNumberParts(numbers[start], numbers[start + 1]);
     if (isValidVerse(bookIndex, chapter, combinedVerse)) {
       return {
         chapter: chapter,
         verse: combinedVerse,
-        consumed: 4
+        consumed: start + 2
       };
     }
   }
-  if (isValidVerse(bookIndex, chapter, numbers[2])) {
+  if (isValidVerse(bookIndex, chapter, numbers[start])) {
     return {
       chapter: chapter,
-      verse: numbers[2],
-      consumed: 3
+      verse: numbers[start],
+      consumed: start + 1
     };
   }
   return null;
