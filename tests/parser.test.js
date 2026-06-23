@@ -30,6 +30,7 @@ ref("book John three sixteen", "John", 3, 16);
 ref("the book of John three sixteen", "John", 3, 16);
 ref("the book John three sixteen", "John", 3, 16);
 ref("go to John three sixteen", "John", 3, 16);
+ref("turn to John three sixteen", "John", 3, 16);
 ref("open psalm twenty three", "Psalms", 23, 1);
 ref("show me Romans eight twenty eight", "Romans", 8, 28);
 ref("John one twenty", "John", 1, 20);
