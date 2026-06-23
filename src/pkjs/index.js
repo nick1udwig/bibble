@@ -169,18 +169,19 @@ function enqueueMessage(message) {
 }
 
 function flushSendQueue() {
+  var message;
+
   if (sending || !sendQueue.length) {
     return;
   }
 
   sending = true;
-  Pebble.sendAppMessage(sendQueue[0], function() {
+  message = sendQueue.shift();
+  Pebble.sendAppMessage(message, function() {
     sending = false;
-    sendQueue.shift();
     flushSendQueue();
   }, function(error) {
     sending = false;
-    sendQueue.shift();
     log("sendAppMessage failed", error);
     flushSendQueue();
   });

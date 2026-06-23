@@ -19,9 +19,12 @@ function freshPkjs(bible) {
   return require("../src/pkjs/index");
 }
 
-function createPebbleMock() {
+function createPebbleMock(options) {
   var listeners = {};
   var sent = [];
+  var pending = [];
+
+  options = options || {};
 
   return {
     sent: sent,
@@ -34,9 +37,16 @@ function createPebbleMock() {
     },
     sendAppMessage: function(message, success) {
       sent.push(message);
-      if (success) {
+      if (options.autoAck === false) {
+        pending.push(success);
+      } else if (success) {
         success();
       }
+    },
+    ackNext: function() {
+      var success = pending.shift();
+      assert.strictEqual(typeof success, "function", "pending send callback should exist");
+      success();
     }
   };
 }
@@ -44,13 +54,14 @@ function createPebbleMock() {
 function withPkjs(options, work) {
   var previousPebble = global.Pebble;
   var previousXmlHttpRequest = global.XMLHttpRequest;
-  var pebble = createPebbleMock();
+  var pebble;
 
   if (typeof options === "function") {
     work = options;
     options = {};
   }
 
+  pebble = createPebbleMock(options.pebble);
   global.Pebble = pebble;
   global.XMLHttpRequest = function HangingRequest() {
     this.open = function() {};
@@ -104,6 +115,19 @@ function pageBibleFake(calls) {
         page: page,
         pageCount: 5,
         text: delta > 0 ? "next" : "previous"
+      };
+    }
+  };
+}
+
+function parseFailBibleFake() {
+  return {
+    isLoaded: function() {
+      return true;
+    },
+    parseReference: function() {
+      return {
+        ok: false
       };
     }
   };
@@ -194,6 +218,37 @@ withPkjs({
   assert.deepStrictEqual(pebble.sent[1], {
     0: "page",
     1: "42|3|1|2|5|next"
+  });
+});
+
+withPkjs({
+  bible: parseFailBibleFake(),
+  pebble: {
+    autoAck: false
+  }
+}, function(pebble) {
+  var index;
+
+  pebble.emit("ready");
+  for (index = 0; index < 16; index += 1) {
+    pebble.emit("appmessage", {
+      payload: {
+        MessageType: "dictation_lookup",
+        Payload: "missing " + String(index)
+      }
+    });
+  }
+
+  assert.deepStrictEqual(pebble.sent[0], {
+    0: "status",
+    1: "Select a book"
+  });
+
+  pebble.ackNext();
+
+  assert.deepStrictEqual(pebble.sent[1], {
+    0: "error",
+    1: "couldn't parse missing 0"
   });
 });
 
