@@ -371,6 +371,12 @@ function parseNumberRun(tokens, start) {
 
   while (index < tokens.length) {
     token = tokens[index];
+    if (token === "and" && current >= 100 && NUMBER_WORDS[tokens[index + 1]] != null) {
+      index += 1;
+      count += 1;
+      continue;
+    }
+
     if (token === "hundred") {
       if (count === 0) {
         break;
