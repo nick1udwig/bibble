@@ -133,6 +133,35 @@ function parseFailBibleFake() {
   };
 }
 
+function dictationBibleFake(calls) {
+  return {
+    isLoaded: function() {
+      return true;
+    },
+    parseReference: function(text) {
+      calls.push(["parse", text]);
+      return {
+        ok: true,
+        bookIndex: 42,
+        chapter: 3,
+        verse: 16,
+        reference: "John 3:16"
+      };
+    },
+    getChapterPage: function(bookIndex, chapter, verse, page) {
+      calls.push(["page", bookIndex, chapter, verse, page]);
+      return {
+        bookIndex: bookIndex,
+        chapter: chapter,
+        verse: verse,
+        page: 2,
+        pageCount: 5,
+        text: "16. For God so loved the world"
+      };
+    }
+  };
+}
+
 withPkjs(function(pebble) {
   pebble.emit("ready");
 
@@ -167,6 +196,31 @@ withPkjs(function(pebble) {
   assert.deepStrictEqual(pebble.sent[0], {
     0: "error",
     1: "couldn't parse not parseable/text"
+  });
+});
+
+var dictationCalls = [];
+withPkjs({
+  bible: dictationBibleFake(dictationCalls)
+}, function(pebble) {
+  pebble.emit("appmessage", {
+    payload: {
+      MessageType: "dictation_lookup",
+      Payload: "John three sixteen"
+    }
+  });
+
+  assert.deepStrictEqual(dictationCalls, [
+    ["parse", "John three sixteen"],
+    ["page", 42, 3, 16, 0]
+  ]);
+  assert.deepStrictEqual(pebble.sent[0], {
+    0: "navigate",
+    1: "42|3|16|John 3:16"
+  });
+  assert.deepStrictEqual(pebble.sent[1], {
+    0: "page",
+    1: "42|3|16|2|5|16. For God so loved the world"
   });
 });
 
