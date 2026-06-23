@@ -553,7 +553,7 @@ function resolveNumbers(bookIndex, numbers, explicitVerse) {
   var chapter;
   var verse;
   var combinedChapter;
-  var combinedVerse;
+  var resolved;
 
   if (!numbers.length) {
     return {
@@ -572,21 +572,13 @@ function resolveNumbers(bookIndex, numbers, explicitVerse) {
   } else {
     chapter = numbers[0];
     verse = numbers[1];
-    combinedChapter = parseInt(String(numbers[0]) + (numbers[1] < 10 ? "0" : "") + String(numbers[1]), 10);
-    if (explicitVerse && numbers.length > 2 && !isValidVerse(bookIndex, chapter, verse) &&
-        numbers.length > 3 && isValidChapter(bookIndex, combinedChapter)) {
-      combinedVerse = combineNumberParts(numbers[2], numbers[3]);
-      if (isValidVerse(bookIndex, combinedChapter, combinedVerse)) {
-        chapter = combinedChapter;
-        verse = combinedVerse;
-      } else if (isValidVerse(bookIndex, combinedChapter, numbers[2])) {
-        chapter = combinedChapter;
-        verse = numbers[2];
+    combinedChapter = combineChapterParts(numbers[0], numbers[1]);
+    if (explicitVerse && numbers.length > 2 && !isValidVerse(bookIndex, chapter, verse)) {
+      resolved = resolveSplitExplicitReference(bookIndex, combinedChapter, numbers);
+      if (resolved) {
+        chapter = resolved.chapter;
+        verse = resolved.verse;
       }
-    } else if (explicitVerse && numbers.length > 2 && !isValidVerse(bookIndex, chapter, verse) &&
-        isValidVerse(bookIndex, combinedChapter, numbers[2])) {
-      chapter = combinedChapter;
-      verse = numbers[2];
     } else if (!explicitVerse && !isValidVerse(bookIndex, chapter, verse) && isValidChapter(bookIndex, combinedChapter)) {
       chapter = combinedChapter;
       verse = 1;
@@ -611,6 +603,34 @@ function resolveNumbers(bookIndex, numbers, explicitVerse) {
     chapter: chapter,
     verse: verse
   };
+}
+
+function resolveSplitExplicitReference(bookIndex, chapter, numbers) {
+  var combinedVerse;
+
+  if (!isValidChapter(bookIndex, chapter)) {
+    return null;
+  }
+  if (numbers.length > 3) {
+    combinedVerse = combineNumberParts(numbers[2], numbers[3]);
+    if (isValidVerse(bookIndex, chapter, combinedVerse)) {
+      return {
+        chapter: chapter,
+        verse: combinedVerse
+      };
+    }
+  }
+  if (isValidVerse(bookIndex, chapter, numbers[2])) {
+    return {
+      chapter: chapter,
+      verse: numbers[2]
+    };
+  }
+  return null;
+}
+
+function combineChapterParts(left, right) {
+  return parseInt(String(left) + (right < 10 ? "0" : "") + String(right), 10);
 }
 
 function combineNumberParts(left, right) {
