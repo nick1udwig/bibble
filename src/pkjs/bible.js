@@ -128,27 +128,6 @@ var NUMBER_WORDS = {
   ninetieth: 90
 };
 
-var SMALL_NUMBER_WORDS = {
-  one: true,
-  first: true,
-  two: true,
-  second: true,
-  three: true,
-  third: true,
-  four: true,
-  fourth: true,
-  five: true,
-  fifth: true,
-  six: true,
-  sixth: true,
-  seven: true,
-  seventh: true,
-  eight: true,
-  eighth: true,
-  nine: true,
-  ninth: true
-};
-
 var pageCache = {};
 var aliasCache = null;
 var kjvBooks = null;
