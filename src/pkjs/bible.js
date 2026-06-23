@@ -569,6 +569,13 @@ function resolveNumbers(bookIndex, numbers, explicitVerse) {
   } else if (numbers.length === 1) {
     chapter = numbers[0];
     verse = 1;
+    if (!isValidChapter(bookIndex, chapter)) {
+      resolved = resolveMergedChapterVerse(bookIndex, numbers[0]);
+      if (resolved) {
+        chapter = resolved.chapter;
+        verse = resolved.verse;
+      }
+    }
   } else {
     chapter = numbers[0];
     verse = numbers[1];
@@ -603,6 +610,34 @@ function resolveNumbers(bookIndex, numbers, explicitVerse) {
     chapter: chapter,
     verse: verse
   };
+}
+
+function resolveMergedChapterVerse(bookIndex, value) {
+  var text = String(value);
+  var index;
+  var chapter;
+  var verse;
+  var match = null;
+
+  if (text.length < 3) {
+    return null;
+  }
+
+  for (index = 1; index < text.length; index += 1) {
+    chapter = parseInt(text.slice(0, index), 10);
+    verse = parseInt(text.slice(index), 10);
+    if (isValidVerse(bookIndex, chapter, verse)) {
+      if (match) {
+        return null;
+      }
+      match = {
+        chapter: chapter,
+        verse: verse
+      };
+    }
+  }
+
+  return match;
 }
 
 function resolveSplitExplicitReference(bookIndex, chapter, numbers) {
