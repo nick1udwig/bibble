@@ -394,6 +394,7 @@ function shouldStopNumberRun(count, current, value, previousToken) {
 
 function normalizeReference(text) {
   return replaceNumberWords(text)
+    .replace(/^(?:the\s+)?book\s+of\s+/, "")
     .replace(/:/g, " ")
     .replace(/\bchapter\b|\bchap\b|\bch\b/gi, " ")
     .replace(/\bverse\b|\bverses\b|\bvs\b|\bv\b/gi, " ")

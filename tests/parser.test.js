@@ -41,6 +41,8 @@ ref("psalm 23 verse 4", "Psalms", 23, 4);
 ref("soulm twenty three", "Psalms", 23, 1);
 ref("salm twenty three", "Psalms", 23, 1);
 ref("John three sixteen", "John", 3, 16);
+ref("book of John three sixteen", "John", 3, 16);
+ref("the book of John three sixteen", "John", 3, 16);
 ref("John one twenty", "John", 1, 20);
 ref("first john two one", "1 John", 2, 1);
 ref("1st Corinthians 13:4", "1 Corinthians", 13, 4);
