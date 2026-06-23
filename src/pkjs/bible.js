@@ -359,13 +359,7 @@ function parseNumberRun(tokens, start) {
       break;
     }
 
-    if (count > 0 && current > 0 && current < 10 && value > 0 && value < 10) {
-      break;
-    }
-    if (count > 0 && current > 20 && current < 100 && current % 10 !== 0 && value > 0 && value < 10) {
-      break;
-    }
-    if (count > 0 && current > 0 && current < 10 && value >= 10 && value < 100 && tokens[index - 1] !== "hundred") {
+    if (shouldStopNumberRun(count, current, value, tokens[index - 1])) {
       break;
     }
 
@@ -383,6 +377,19 @@ function parseNumberRun(tokens, start) {
     value: total,
     count: count
   };
+}
+
+function shouldStopNumberRun(count, current, value, previousToken) {
+  if (count === 0) {
+    return false;
+  }
+  if (current > 0 && current < 10 && value > 0 && value < 10) {
+    return true;
+  }
+  if (current > 20 && current < 100 && current % 10 !== 0 && value > 0 && value < 10) {
+    return true;
+  }
+  return current > 0 && current < 10 && value >= 10 && value < 100 && previousToken !== "hundred";
 }
 
 function normalizeReference(text) {

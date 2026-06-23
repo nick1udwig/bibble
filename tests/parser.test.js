@@ -47,9 +47,12 @@ ref("1st Corinthians 13:4", "1 Corinthians", 13, 4);
 ref("Song of Solomon 2 1", "Song of Solomon", 2, 1);
 ref("Jude 5", "Jude", 1, 5);
 ref("revelations twenty one four", "Revelation", 21, 4);
+ref("revelation twenty first four", "Revelation", 21, 4);
 ref("psalm one nineteen", "Psalms", 119, 1);
+ref("psalm one hundred nineteen", "Psalms", 119, 1);
 ref("psalm one twenty", "Psalms", 120, 1);
 ref("psalm one twenty three", "Psalms", 123, 1);
+ref("john twenty one", "John", 21, 1);
 fail("somewhere around breakfast");
 fail("John 99");
 
