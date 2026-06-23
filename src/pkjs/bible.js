@@ -439,11 +439,14 @@ function buildAliases() {
   var shortName;
 
   function add(bookIndex, alias) {
+    var seenKey;
+
     alias = normalizeReference(alias);
-    if (!alias || seen[alias]) {
+    seenKey = String(bookIndex) + "|" + alias;
+    if (!alias || seen[seenKey]) {
       return;
     }
-    seen[alias] = true;
+    seen[seenKey] = true;
     aliases.push({
       alias: alias,
       bookIndex: bookIndex
@@ -490,6 +493,7 @@ function parseReference(input) {
   var numbers;
   var explicitVerse = /[:]|(?:^|\s)(verse|verses|vs|v)(?:\s|$)/i.test(String(input || ""));
   var parsed;
+  var firstError = null;
 
   for (index = 0; index < allAliases.length; index += 1) {
     alias = allAliases[index];
@@ -508,12 +512,18 @@ function parseReference(input) {
           reference: formatReference(alias.bookIndex, parsed.chapter, parsed.verse)
         };
       }
-      return {
-        ok: false,
-        input: String(input || ""),
-        error: parsed.error || "invalid reference"
-      };
+      if (!firstError) {
+        firstError = parsed.error || "invalid reference";
+      }
     }
+  }
+
+  if (firstError) {
+    return {
+      ok: false,
+      input: String(input || ""),
+      error: firstError
+    };
   }
 
   return {
