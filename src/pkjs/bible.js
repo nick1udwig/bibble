@@ -472,7 +472,10 @@ function buildAliases() {
   }
 
   aliases.sort(function(left, right) {
-    return right.alias.length - left.alias.length;
+    if (right.alias.length !== left.alias.length) {
+      return right.alias.length - left.alias.length;
+    }
+    return left.bookIndex - right.bookIndex;
   });
   return aliases;
 }
