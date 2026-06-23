@@ -1,30 +1,9 @@
 "use strict";
 
 var assert = require("assert");
-var KJV_META = require("../src/pkjs/bible-meta");
-
-function testBooks() {
-  return KJV_META.map(function(book) {
-    return {
-      abbrev: book.abbrev,
-      chapters: book.verseCounts.map(function(verseCount) {
-        var verses = [];
-        var verse;
-
-        for (verse = 1; verse <= verseCount; verse += 1) {
-          verses.push(String(verse));
-        }
-        return verses;
-      })
-    };
-  });
-}
-
-function freshBible() {
-  var modulePath = require.resolve("../src/pkjs/bible");
-  delete require.cache[modulePath];
-  return require("../src/pkjs/bible");
-}
+var helpers = require("./helpers");
+var freshBible = helpers.freshBible;
+var testBooks = helpers.testBooks;
 
 function withXmlHttpRequest(mock, work) {
   var previous = global.XMLHttpRequest;

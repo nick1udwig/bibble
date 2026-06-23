@@ -2,32 +2,18 @@
 
 var assert = require("assert");
 var Bible = require("../src/pkjs/bible");
-var KJV_META = require("../src/pkjs/bible-meta");
+var testBooks = require("./helpers").testBooks;
 
 var PAGE_CHAR_LIMIT = 360;
 
-function testBooks() {
-  return KJV_META.map(function(book, bookIndex) {
-    return {
-      abbrev: book.abbrev,
-      chapters: book.verseCounts.map(function(verseCount, chapterIndex) {
-        var verses = [];
-        var verse;
-
-        for (verse = 1; verse <= verseCount; verse += 1) {
-          if (bookIndex === 0 && chapterIndex === 0 && verse === 1) {
-            verses.push(new Array(PAGE_CHAR_LIMIT + 42).join("a"));
-          } else {
-            verses.push(book.name + " " + String(chapterIndex + 1) + ":" + String(verse));
-          }
-        }
-        return verses;
-      })
-    };
-  });
-}
-
-Bible.loadFromBooks(testBooks());
+Bible.loadFromBooks(testBooks({
+  verseText: function(_book, bookIndex, chapter, verse) {
+    if (bookIndex === 0 && chapter === 1 && verse === 1) {
+      return new Array(PAGE_CHAR_LIMIT + 42).join("a");
+    }
+    return null;
+  }
+}));
 
 var firstPage = Bible.getChapterPage(0, 1, 1, 1);
 var pageNumber;

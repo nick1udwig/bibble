@@ -2,25 +2,7 @@
 
 var assert = require("assert");
 var Bible = require("../src/pkjs/bible");
-var KJV_META = require("../src/pkjs/bible-meta");
-
-function testBooks() {
-  return KJV_META.map(function(book) {
-    return {
-      abbrev: book.abbrev,
-      chapters: book.verseCounts.map(function(verseCount, chapterIndex) {
-        var chapter = chapterIndex + 1;
-        var verses = [];
-        var verse;
-
-        for (verse = 1; verse <= verseCount; verse += 1) {
-          verses.push(book.name + " " + String(chapter) + ":" + String(verse));
-        }
-        return verses;
-      })
-    };
-  });
-}
+var testBooks = require("./helpers").testBooks;
 
 function ref(input, bookName, chapter, verse) {
   var parsed = Bible.parseReference(input);
