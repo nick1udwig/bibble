@@ -331,6 +331,13 @@ function replaceNumberWords(text) {
   var parsed;
 
   while (index < tokens.length) {
+    parsed = parseZeroDigitRun(tokens, index);
+    if (parsed.count > 0) {
+      output.push(String(parsed.value));
+      index += parsed.count;
+      continue;
+    }
+
     parsed = parseNumberRun(tokens, index);
     if (parsed.count > 0) {
       output.push(String(parsed.value));
@@ -342,6 +349,37 @@ function replaceNumberWords(text) {
   }
 
   return output.join(" ").replace(/\s+/g, " ").trim();
+}
+
+function parseZeroDigitRun(tokens, start) {
+  var index = start;
+  var digits = "";
+  var hasZero = false;
+  var value;
+
+  while (index < tokens.length) {
+    value = NUMBER_WORDS[tokens[index]];
+    if (value == null || value < 0 || value > 9) {
+      break;
+    }
+    if (value === 0) {
+      hasZero = true;
+    }
+    digits += String(value);
+    index += 1;
+  }
+
+  if (!hasZero || index === start || index === start + 1) {
+    return {
+      value: 0,
+      count: 0
+    };
+  }
+
+  return {
+    value: parseInt(digits, 10),
+    count: index - start
+  };
 }
 
 function parseNumberRun(tokens, start) {
