@@ -580,7 +580,11 @@ function resolveNumbers(bookIndex, numbers, explicitVerse) {
     chapter = numbers[0];
     verse = numbers[1];
     combinedChapter = parseInt(String(numbers[0]) + (numbers[1] < 10 ? "0" : "") + String(numbers[1]), 10);
-    if (!explicitVerse && !isValidVerse(bookIndex, chapter, verse) && isValidChapter(bookIndex, combinedChapter)) {
+    if (explicitVerse && numbers.length > 2 && !isValidVerse(bookIndex, chapter, verse) &&
+        isValidVerse(bookIndex, combinedChapter, numbers[2])) {
+      chapter = combinedChapter;
+      verse = numbers[2];
+    } else if (!explicitVerse && !isValidVerse(bookIndex, chapter, verse) && isValidChapter(bookIndex, combinedChapter)) {
       chapter = combinedChapter;
       verse = 1;
     }
