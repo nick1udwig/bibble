@@ -63,6 +63,10 @@ function handlePageRequest(payload) {
     sendError("Bad chapter");
     return;
   }
+  if (verse > 0 && !Bible.isValidVerse(bookIndex, chapter, verse)) {
+    sendError("Bad verse");
+    return;
+  }
 
   withBibleReady(function() {
     var result;

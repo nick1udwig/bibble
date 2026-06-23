@@ -95,6 +95,9 @@ function pageBibleFake(calls) {
     isValidChapter: function(bookIndex, chapter) {
       return bookIndex === 42 && chapter === 3;
     },
+    isValidVerse: function(bookIndex, chapter, verse) {
+      return bookIndex === 42 && chapter === 3 && verse >= 1 && verse <= 16;
+    },
     getChapterPage: function(bookIndex, chapter, verse, page) {
       calls.push(["chapter", bookIndex, chapter, verse, page]);
       return {
@@ -300,6 +303,24 @@ withPkjs({
   assert.deepStrictEqual(pebble.sent[2], {
     0: "error",
     1: "Bad chapter"
+  });
+});
+
+var invalidVerseCalls = [];
+withPkjs({
+  bible: pageBibleFake(invalidVerseCalls)
+}, function(pebble) {
+  pebble.emit("appmessage", {
+    payload: {
+      MessageType: "page_request",
+      Payload: "42|3|99|0"
+    }
+  });
+
+  assert.deepStrictEqual(invalidVerseCalls, []);
+  assert.deepStrictEqual(pebble.sent[0], {
+    0: "error",
+    1: "Bad verse"
   });
 });
 
