@@ -683,7 +683,7 @@ function getAdjacentPage(bookIndex, chapter, page, delta) {
       nextBook += 1;
       nextChapter = 1;
     } else {
-      return getChapterPage(bookIndex, chapter, 0, cache.pages.length);
+      return getChapterPage(nextBook, nextChapter, 0, cache.pages.length);
     }
     return getChapterPage(nextBook, nextChapter, 0, 1);
   }
@@ -694,7 +694,7 @@ function getAdjacentPage(bookIndex, chapter, page, delta) {
     nextBook -= 1;
     nextChapter = chapterCount(nextBook);
   } else {
-    return getChapterPage(bookIndex, chapter, 0, 1);
+    return getChapterPage(nextBook, nextChapter, 0, 1);
   }
   cache = getChapterCache(nextBook, nextChapter);
   return getChapterPage(nextBook, nextChapter, 0, cache.pages.length);

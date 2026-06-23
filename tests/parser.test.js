@@ -79,4 +79,15 @@ assert.strictEqual(invalidVersePage.bookName, "John");
 assert.strictEqual(invalidVersePage.chapter, 3);
 assert.strictEqual(invalidVersePage.verse, 1, "invalid verse lookup should report fallback page verse");
 
+var firstPage = Bible.getChapterPage(0, 1, 1, 1);
+var previousFromFirst = Bible.getAdjacentPage(0, 1, firstPage.page, -1);
+assert.strictEqual(previousFromFirst.bookName, "Genesis");
+assert.strictEqual(previousFromFirst.chapter, 1);
+assert.strictEqual(previousFromFirst.page, 1);
+
+var invalidPrevious = Bible.getAdjacentPage(999, 999, 1, -1);
+assert.strictEqual(invalidPrevious.bookName, "Genesis");
+assert.strictEqual(invalidPrevious.chapter, 1);
+assert.strictEqual(invalidPrevious.page, 1);
+
 console.log("parser tests passed");
