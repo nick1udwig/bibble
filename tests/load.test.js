@@ -81,4 +81,26 @@ withXmlHttpRequest(function HangingRequest() {
   assert.strictEqual(callbackCount, 1, "direct load should flush pending callbacks");
 });
 
+withXmlHttpRequest(function SuccessfulRequest() {
+  this.open = function() {};
+  this.send = function() {
+    this.readyState = 4;
+    this.status = 200;
+    this.responseText = JSON.stringify(testBooks());
+    this.onreadystatechange();
+  };
+}, function() {
+  var Bible = freshBible();
+  var callbackCount = 0;
+
+  Bible.ensureLoaded(function(error) {
+    callbackCount += 1;
+    assert.strictEqual(error, null);
+  });
+
+  assert.strictEqual(Bible.loadState(), "ready");
+  assert.strictEqual(Bible.isLoaded(), true);
+  assert.strictEqual(callbackCount, 1, "successful request should flush callbacks once");
+});
+
 console.log("load tests passed");

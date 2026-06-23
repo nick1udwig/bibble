@@ -265,7 +265,6 @@ function ensureLoaded(callback) {
     if (request.status >= 200 && request.status < 300) {
       try {
         loadFromJsonText(request.responseText);
-        flushLoadCallbacks(null);
       } catch (error) {
         failLoad(error && error.message ? error.message : "KJV parse failed");
       }
