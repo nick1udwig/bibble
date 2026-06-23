@@ -50,10 +50,10 @@ Pebble.addEventListener("appmessage", function(event) {
 
 function handlePageRequest(payload) {
   var fields = splitPayload(payload || "");
-  var bookIndex = parseInt(fields[0], 10);
-  var chapter = parseInt(fields[1], 10);
-  var verse = parseInt(fields[2], 10);
-  var page = parseInt(fields[3], 10);
+  var bookIndex = parsePayloadInteger(fields[0]);
+  var chapter = parsePayloadInteger(fields[1]);
+  var verse = parsePayloadInteger(fields[2]);
+  var page = parsePayloadInteger(fields[3]);
 
   if (!Bible.isValidChapter(bookIndex, chapter)) {
     sendError("Bad chapter");
@@ -205,6 +205,14 @@ function readPayloadValue(payload, numericKey, namedKey) {
 
 function splitPayload(payload) {
   return String(payload || "").split("|");
+}
+
+function parsePayloadInteger(value) {
+  var text = String(value == null ? "" : value).trim();
+  if (!/^-?\d+$/.test(text)) {
+    return NaN;
+  }
+  return parseInt(text, 10);
 }
 
 function sanitizeField(value, maxBytes) {

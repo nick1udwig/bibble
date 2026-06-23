@@ -221,6 +221,24 @@ withPkjs({
   });
 });
 
+var malformedPageCalls = [];
+withPkjs({
+  bible: pageBibleFake(malformedPageCalls)
+}, function(pebble) {
+  pebble.emit("appmessage", {
+    payload: {
+      MessageType: "page_request",
+      Payload: "42x|3|16|0"
+    }
+  });
+
+  assert.deepStrictEqual(malformedPageCalls, []);
+  assert.deepStrictEqual(pebble.sent[0], {
+    0: "error",
+    1: "Bad chapter"
+  });
+});
+
 withPkjs({
   bible: parseFailBibleFake(),
   pebble: {
