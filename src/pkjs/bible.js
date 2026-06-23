@@ -646,13 +646,14 @@ function isValidVerse(bookIndex, chapter, verse) {
 
 function getChapterPage(bookIndex, chapter, verse, page) {
   var cache = getChapterCache(bookIndex, chapter);
-  var selectedPage = page > 0 ? page : cache.versePage[verse] || 1;
+  var selectedVerse = isValidVerse(bookIndex, chapter, verse) ? verse : 0;
+  var selectedPage = page > 0 ? page : cache.versePage[selectedVerse] || 1;
   selectedPage = clampPage(selectedPage, cache.pages.length);
   return {
     bookIndex: bookIndex,
     bookName: bookName(bookIndex),
     chapter: chapter,
-    verse: verse || cache.pageFirstVerse[selectedPage] || 1,
+    verse: selectedVerse || cache.pageFirstVerse[selectedPage] || 1,
     page: selectedPage,
     pageCount: cache.pages.length,
     text: cache.pages[selectedPage - 1] || ""

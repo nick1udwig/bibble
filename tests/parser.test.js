@@ -74,4 +74,9 @@ assert.strictEqual(page.bookName, "John");
 assert.strictEqual(page.chapter, 3);
 assert(page.text.indexOf("16.") !== -1, "John 3:16 page should include verse marker");
 
+var invalidVersePage = Bible.getChapterPage(42, 3, 999, 0);
+assert.strictEqual(invalidVersePage.bookName, "John");
+assert.strictEqual(invalidVersePage.chapter, 3);
+assert.strictEqual(invalidVersePage.verse, 1, "invalid verse lookup should report fallback page verse");
+
 console.log("parser tests passed");
