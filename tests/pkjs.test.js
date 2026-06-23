@@ -83,4 +83,18 @@ withPkjs(function(pebble) {
   });
 });
 
+withPkjs(function(pebble) {
+  pebble.emit("appmessage", {
+    payload: {
+      MessageType: "dictation_lookup",
+      Payload: "not\rparseable|text"
+    }
+  });
+
+  assert.deepStrictEqual(pebble.sent[0], {
+    0: "error",
+    1: "couldn't parse not parseable/text"
+  });
+});
+
 console.log("pkjs tests passed");

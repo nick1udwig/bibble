@@ -210,7 +210,8 @@ function sanitizeField(value, maxBytes) {
   return truncateUtf8(
     String(value == null ? "" : value)
       .replace(/\|/g, "/")
-      .replace(/\r?\n/g, " ")
+      .replace(/\r\n/g, " ")
+      .replace(/[\r\n]/g, " ")
       .trim(),
     maxBytes
   );
