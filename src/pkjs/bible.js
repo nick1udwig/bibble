@@ -365,7 +365,7 @@ function parseNumberRun(tokens, start) {
     if (count > 0 && current > 20 && current < 100 && current % 10 !== 0 && value > 0 && value < 10) {
       break;
     }
-    if (count > 0 && current > 0 && current < 10 && value >= 10 && value < 20 && tokens[index - 1] !== "hundred") {
+    if (count > 0 && current > 0 && current < 10 && value >= 10 && value < 100 && tokens[index - 1] !== "hundred") {
       break;
     }
 
