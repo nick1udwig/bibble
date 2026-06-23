@@ -201,6 +201,7 @@ function loadFromBooks(rawBooks) {
   pageCache = {};
   loadStateValue = "ready";
   loadError = "";
+  flushLoadCallbacks(null);
 }
 
 function loadFromJsonText(text) {

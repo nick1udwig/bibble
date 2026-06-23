@@ -1,6 +1,24 @@
 "use strict";
 
 var assert = require("assert");
+var KJV_META = require("../src/pkjs/bible-meta");
+
+function testBooks() {
+  return KJV_META.map(function(book) {
+    return {
+      abbrev: book.abbrev,
+      chapters: book.verseCounts.map(function(verseCount) {
+        var verses = [];
+        var verse;
+
+        for (verse = 1; verse <= verseCount; verse += 1) {
+          verses.push(String(verse));
+        }
+        return verses;
+      })
+    };
+  });
+}
 
 function freshBible() {
   var modulePath = require.resolve("../src/pkjs/bible");
@@ -40,6 +58,27 @@ withXmlHttpRequest(function ThrowingRequest() {
   assert.strictEqual(callbackCount, 1, "sync send failure should flush pending callbacks");
   assert.strictEqual(Bible.loadState(), "error");
   assert.strictEqual(Bible.lastLoadError(), "KJV download failed");
+});
+
+withXmlHttpRequest(function HangingRequest() {
+  this.open = function() {};
+  this.send = function() {};
+}, function() {
+  var Bible = freshBible();
+  var callbackCount = 0;
+
+  Bible.ensureLoaded(function(error) {
+    callbackCount += 1;
+    assert.strictEqual(error, null);
+  });
+  assert.strictEqual(Bible.loadState(), "loading");
+  assert.strictEqual(callbackCount, 0, "callback should wait while request is pending");
+
+  Bible.loadFromBooks(testBooks());
+
+  assert.strictEqual(Bible.loadState(), "ready");
+  assert.strictEqual(Bible.isLoaded(), true);
+  assert.strictEqual(callbackCount, 1, "direct load should flush pending callbacks");
 });
 
 console.log("load tests passed");
