@@ -330,6 +330,50 @@ function replaceNumberWords(text) {
   return output.join(" ").replace(/\s+/g, " ").trim();
 }
 
+function firstToken(text) {
+  return String(text || "").split(" ")[0];
+}
+
+function startsWithNumberToken(text) {
+  var token = firstToken(text);
+  return /^\d+(?::\d+)?$/.test(token) || token === "hundred" || NUMBER_WORDS[token] != null;
+}
+
+function startsWithOneToken(text) {
+  var token = firstToken(text);
+  return token === "1" || token === "one" || token === "first";
+}
+
+function normalizeSpeechReferenceText(text) {
+  var normalized = normalizeWords(text);
+  var rest;
+
+  if (normalized === "so im" || normalized === "so im on") {
+    return "unparseable " + normalized;
+  }
+
+  if (normalized.indexOf("so im on ") === 0) {
+    rest = normalized.slice("so im on ".length);
+    if (startsWithOneToken(rest)) {
+      return "psalm " + rest;
+    }
+    if (startsWithNumberToken(rest)) {
+      return "psalm one " + rest;
+    }
+    return "unparseable " + normalized;
+  }
+
+  if (normalized.indexOf("so im ") === 0) {
+    rest = normalized.slice("so im ".length);
+    if (startsWithNumberToken(rest)) {
+      return "psalm " + rest;
+    }
+    return "unparseable " + normalized;
+  }
+
+  return normalized;
+}
+
 function parseZeroDigitRun(tokens, start) {
   var index = start;
   var digits = "";
@@ -426,7 +470,7 @@ function shouldStopNumberRun(count, current, value, previousToken) {
 }
 
 function normalizeReference(text) {
-  return replaceNumberWords(text)
+  return replaceNumberWords(normalizeSpeechReferenceText(text))
     .replace(/^(?:please\s+)?(?:(?:go|turn)\s+(?:to|2)|open|show\s+me|show|find|read)\s+/, "")
     .replace(/^(?:the\s+)?book(?:\s+of)?\s+/, "")
     .replace(/^the\s+/, "")
