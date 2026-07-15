@@ -1777,9 +1777,13 @@ static void prv_handle_prefetch_page(const char *payload) {
     return;
   }
 
-  entry = prv_cache_store(book, chapter, verse, page, page_count, text);
-  if (!entry || generation != s_prefetch_generation || !s_prefetch_in_flight ||
+  if (generation != s_prefetch_generation || !s_prefetch_in_flight ||
       s_prefetch_step >= BIBBLE_PREFETCH_STEP_COUNT) {
+    return;
+  }
+
+  entry = prv_cache_store(book, chapter, verse, page, page_count, text);
+  if (!entry) {
     return;
   }
 

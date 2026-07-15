@@ -3,6 +3,8 @@
 var KJV_META = require("./bible-meta");
 
 var PAGE_CHAR_LIMIT = 360;
+var CHAPTER_PAGE_CACHE_LIMIT = 12;
+var TEXT_BOOK_CACHE_LIMIT = 4;
 var KJV_SOURCE_URL = "https://raw.githubusercontent.com/thiagobodruk/bible/master/json/en_kjv.json";
 var KJV_DOWNLOAD_TIMEOUT_MS = 30000;
 var KJV_STORAGE_VERSION = "kjv-books-v1";
@@ -134,8 +136,11 @@ var NUMBER_WORDS = {
 };
 
 var pageCache = {};
+var pageCacheKeys = [];
 var aliasCache = null;
 var kjvBooks = null;
+var textBookCacheKeys = [];
+var usingPersistentCorpus = false;
 var corpusAvailable = false;
 var loadStateValue = "idle";
 var loadError = "";
@@ -147,6 +152,54 @@ function books() {
 
 function bookAt(bookIndex) {
   return books()[bookIndex];
+}
+
+function touchCacheKey(keys, key, limit, evict) {
+  var index;
+
+  for (index = 0; index < keys.length; index += 1) {
+    if (keys[index] === key) {
+      keys.splice(index, 1);
+      break;
+    }
+  }
+  keys.push(key);
+  while (keys.length > limit) {
+    evict(keys.shift());
+  }
+}
+
+function resetPageCache() {
+  pageCache = {};
+  pageCacheKeys = [];
+}
+
+function touchPageCache(key) {
+  touchCacheKey(pageCacheKeys, key, CHAPTER_PAGE_CACHE_LIMIT, function(evictedKey) {
+    delete pageCache[evictedKey];
+  });
+}
+
+function storePageCache(key, value) {
+  pageCache[key] = value;
+  touchPageCache(key);
+  return value;
+}
+
+function touchTextBookCache(bookIndex) {
+  if (!usingPersistentCorpus) {
+    return;
+  }
+  touchCacheKey(textBookCacheKeys, bookIndex, TEXT_BOOK_CACHE_LIMIT, function(evictedBookIndex) {
+    delete kjvBooks[evictedBookIndex];
+  });
+}
+
+function cacheInfo() {
+  return {
+    chapters: pageCacheKeys.length,
+    textBooks: usingPersistentCorpus ? textBookCacheKeys.length : 0
+  };
 }
 
 function getChapterVerses(bookIndex, chapter) {
@@ -218,6 +271,9 @@ function invalidatePersistentCorpus(storage) {
   }
   corpusAvailable = false;
   kjvBooks = null;
+  textBookCacheKeys = [];
+  usingPersistentCorpus = false;
+  resetPageCache();
   loadStateValue = "error";
   loadError = "Cached KJV data is invalid";
 }
@@ -228,6 +284,7 @@ function loadTextBook(bookIndex) {
   var chapters;
 
   if (kjvBooks && kjvBooks[bookIndex]) {
+    touchTextBookCache(bookIndex);
     return kjvBooks[bookIndex];
   }
   if (!corpusAvailable) {
@@ -253,6 +310,7 @@ function loadTextBook(bookIndex) {
   kjvBooks[bookIndex] = {
     chapters: chapters
   };
+  touchTextBookCache(bookIndex);
   return kjvBooks[bookIndex];
 }
 
@@ -271,6 +329,8 @@ function restorePersistentCorpus() {
   }
 
   kjvBooks = [];
+  textBookCacheKeys = [];
+  usingPersistentCorpus = true;
   corpusAvailable = true;
   loadStateValue = "ready";
   loadError = "";
@@ -345,10 +405,14 @@ function loadFromBooks(rawBooks) {
   corpusAvailable = true;
   if (persistNormalizedBooks(normalized)) {
     kjvBooks = [];
+    textBookCacheKeys = [];
+    usingPersistentCorpus = true;
   } else {
     kjvBooks = normalized;
+    textBookCacheKeys = [];
+    usingPersistentCorpus = false;
   }
-  pageCache = {};
+  resetPageCache();
   loadStateValue = "ready";
   loadError = "";
   flushLoadCallbacks(null);
@@ -1031,17 +1095,17 @@ function getChapterCache(bookIndex, chapter) {
   var index;
 
   if (pageCache[key]) {
+    touchPageCache(key);
     return pageCache[key];
   }
 
   verses = getChapterVerses(bookIndex, chapter);
   if (!verses) {
-    pageCache[key] = {
+    return storePageCache(key, {
       pages: [""],
       pageFirstVerse: [1, 1],
       versePage: [0, 1]
-    };
-    return pageCache[key];
+    });
   }
 
   for (index = 0; index < verses.length; index += 1) {
@@ -1058,12 +1122,11 @@ function getChapterCache(bookIndex, chapter) {
     pageFirstVerse[1] = 1;
   }
 
-  pageCache[key] = {
+  return storePageCache(key, {
     pages: pages,
     pageFirstVerse: pageFirstVerse,
     versePage: versePage
-  };
-  return pageCache[key];
+  });
 }
 
 function appendVerseLine(pages, pageFirstVerse, versePage, current, verse, line) {
@@ -1181,6 +1244,7 @@ module.exports = {
   isLoaded: isLoaded,
   loadState: loadState,
   lastLoadError: lastLoadError,
+  cacheInfo: cacheInfo,
   loadFromBooks: loadFromBooks,
   loadFromJsonText: loadFromJsonText
 };

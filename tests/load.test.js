@@ -168,6 +168,16 @@ withLocalStorage(memoryStorage(), function() {
   assert(page.text.indexOf("16. John 3:16") !== -1);
   assert(storage.reads.indexOf("bibble.kjv-books-v1.book.42") !== -1, "requested book should hydrate");
   assert.strictEqual(storage.reads.indexOf("bibble.kjv-books-v1.book.0"), -1, "unrequested books should stay cold");
+
+  [0, 1, 2, 3, 4, 5].forEach(function(bookIndex) {
+    RestoredBible.getChapterPage(bookIndex, 1, 1, 0);
+  });
+  assert.strictEqual(RestoredBible.cacheInfo().textBooks, 4, "hydrated book cache should be bounded");
+
+  for (var chapter = 1; chapter <= 20; chapter += 1) {
+    RestoredBible.getChapterPage(0, chapter, 1, 0);
+  }
+  assert.strictEqual(RestoredBible.cacheInfo().chapters, 12, "chapter page cache should be bounded");
 });
 
 withLocalStorage((function() {
