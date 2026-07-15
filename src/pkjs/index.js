@@ -10,9 +10,11 @@ var Key = Object.freeze({
 var MessageType = Object.freeze({
   ready: "ready",
   pageRequest: "page_request",
+  prefetchRequest: "prefetch_request",
   dictationLookup: "dictation_lookup",
   status: "status",
   page: "page",
+  prefetchPage: "prefetch_page",
   navigate: "navigate",
   error: "error"
 });
@@ -43,6 +45,8 @@ Pebble.addEventListener("appmessage", function(event) {
     startBibleDownload();
   } else if (type === MessageType.pageRequest) {
     handlePageRequest(payload);
+  } else if (type === MessageType.prefetchRequest) {
+    handlePrefetchRequest(payload);
   } else if (type === MessageType.dictationLookup) {
     handleDictationLookup(payload);
   }
@@ -82,6 +86,32 @@ function handlePageRequest(payload) {
     }
 
     sendPage(result);
+  });
+}
+
+function handlePrefetchRequest(payload) {
+  var fields = splitPayload(payload || "");
+  var bookIndex = parsePayloadInteger(fields[0]);
+  var chapter = parsePayloadInteger(fields[1]);
+  var page = parsePayloadInteger(fields[2]);
+  var delta = parsePayloadInteger(fields[3]);
+  var generation = parsePayloadInteger(fields[4]);
+
+  if (
+    !Bible.isValidChapter(bookIndex, chapter) ||
+    page !== page ||
+    page < 1 ||
+    delta !== delta ||
+    (delta !== -1 && delta !== 1) ||
+    generation !== generation ||
+    generation < 0 ||
+    generation > 65535
+  ) {
+    return;
+  }
+
+  withBibleReady(function() {
+    sendPrefetchPage(Bible.getAdjacentPage(bookIndex, chapter, page, delta), generation);
   });
 }
 
@@ -143,6 +173,21 @@ function sendPage(page) {
   sendEnvelope(
     MessageType.page,
     truncateUtf8([
+      page.bookIndex,
+      page.chapter,
+      page.verse,
+      page.page,
+      page.pageCount,
+      sanitizePageText(page.text, ProtocolByteLimit.pageText)
+    ].join("|"), ProtocolByteLimit.payload)
+  );
+}
+
+function sendPrefetchPage(page, generation) {
+  sendEnvelope(
+    MessageType.prefetchPage,
+    truncateUtf8([
+      generation,
       page.bookIndex,
       page.chapter,
       page.verse,

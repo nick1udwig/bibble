@@ -20,21 +20,28 @@
 #define BIBBLE_ROUND_GRID_BOTTOM_GAP 4
 #define BIBBLE_TOUCH_TAP_MAX_PX 15
 #define BIBBLE_TOUCH_SWIPE_MIN_PX 40
-#define BIBBLE_READER_FOOTER_HEIGHT 20
+#define BIBBLE_READER_HEADER_HEIGHT 18
+#define BIBBLE_READER_HEADER_TIME_WIDTH 42
 #define BIBBLE_READER_TEXT_PADDING 4
 #define BIBBLE_READER_TEXT_MEASURE_HEIGHT 24000
 #define BIBBLE_ROUND_READER_SIDE_INSET 30
 #define BIBBLE_ROUND_READER_TOP_INSET 30
 #define BIBBLE_ROUND_READER_BOTTOM_GAP 10
+#define BIBBLE_ROUND_READER_HEADER_HEIGHT 24
+#define BIBBLE_ROUND_READER_HEADER_SIDE_INSET 76
+#define BIBBLE_PAGE_CACHE_SIZE 8
+#define BIBBLE_PREFETCH_STEP_COUNT 6
 #define BIBBLE_READY_DELAY_MS 300
 #define BIBBLE_PAGE_REQUEST_DELAY_MS 120
 #define BIBBLE_SELECT_HOLD_MS 700
 
 #define BIBBLE_MSG_READY "ready"
 #define BIBBLE_MSG_PAGE_REQUEST "page_request"
+#define BIBBLE_MSG_PREFETCH_REQUEST "prefetch_request"
 #define BIBBLE_MSG_DICTATION_LOOKUP "dictation_lookup"
 #define BIBBLE_MSG_STATUS "status"
 #define BIBBLE_MSG_PAGE "page"
+#define BIBBLE_MSG_PREFETCH_PAGE "prefetch_page"
 #define BIBBLE_MSG_NAVIGATE "navigate"
 #define BIBBLE_MSG_ERROR "error"
 
@@ -49,11 +56,13 @@ static ScrollLayer *s_reader_scroll_layer;
 static Layer *s_book_grid_layer;
 static Layer *s_chapter_grid_layer;
 static Layer *s_verse_grid_layer;
+static Layer *s_reader_header_layer;
 static TextLayer *s_book_status_layer;
 static TextLayer *s_chapter_status_layer;
 static TextLayer *s_verse_status_layer;
 static TextLayer *s_reader_body_layer;
-static TextLayer *s_reader_footer_layer;
+static TextLayer *s_reader_reference_layer;
+static TextLayer *s_reader_time_layer;
 static AppTimer *s_ready_timer;
 static AppTimer *s_page_request_timer;
 static AppTimer *s_select_hold_timer;
@@ -66,6 +75,8 @@ static char s_chapter_status[BIBBLE_STATUS_LENGTH] = "";
 static char s_verse_status[BIBBLE_STATUS_LENGTH] = "";
 static char s_reader_text[BIBBLE_READER_TEXT_LENGTH] = "";
 static char s_current_reference[BIBBLE_REF_LENGTH] = "";
+static char s_reader_reference[BIBBLE_REF_LENGTH] = "";
+static char s_reader_time[8] = "";
 static uint8_t s_selected_book;
 static uint8_t s_selected_chapter = 1;
 static uint16_t s_selected_chapter_index;
@@ -88,6 +99,35 @@ static int s_touch_down_x;
 static int s_touch_down_y;
 static int s_touch_last_y;
 
+typedef struct {
+  bool valid;
+  uint8_t book;
+  uint8_t chapter;
+  uint8_t verse;
+  uint16_t page;
+  uint16_t page_count;
+  uint32_t last_used;
+  char text[BIBBLE_READER_TEXT_LENGTH];
+} BibbleCachedPage;
+
+typedef struct {
+  uint8_t book;
+  uint8_t chapter;
+  uint16_t page;
+  uint16_t page_count;
+} BibblePageCursor;
+
+static BibbleCachedPage s_page_cache[BIBBLE_PAGE_CACHE_SIZE];
+static uint32_t s_page_cache_clock;
+static uint16_t s_prefetch_generation;
+static uint8_t s_prefetch_step;
+static int8_t s_prefetch_direction;
+static bool s_prefetch_in_flight;
+static BibblePageCursor s_prefetch_forward_cursor;
+static BibblePageCursor s_prefetch_backward_cursor;
+// Interleave the nearest pages in both directions, then spend the larger window on look-ahead.
+static const int8_t BIBBLE_PREFETCH_DIRECTIONS[BIBBLE_PREFETCH_STEP_COUNT] = {1, -1, 1, -1, 1, 1};
+
 typedef enum {
   BibbleGridKindNone = 0,
   BibbleGridKindBook,
@@ -99,6 +139,7 @@ static void prv_set_status(const char *status);
 static void prv_update_status_layers(void);
 static void prv_update_active_status_layer(void);
 static void prv_update_reader_layers(bool reset_scroll);
+static void prv_start_prefetch(void);
 static bool prv_send_message(const char *type, const char *payload);
 static void prv_request_page(uint8_t book, uint8_t chapter, uint8_t verse, uint16_t page);
 static void prv_schedule_page_request(uint8_t book, uint8_t chapter, uint8_t verse, uint16_t page);
@@ -110,6 +151,7 @@ static BibbleGridKind prv_active_grid(void);
 static void prv_touch_handler(const TouchEvent *event, void *context);
 static void prv_grid_click_config_provider(void *context);
 static void prv_reader_click_config_provider(void *context);
+static void prv_minute_tick_handler(struct tm *tick_time, TimeUnits units_changed);
 static void prv_select_raw_down_handler(ClickRecognizerRef recognizer, void *context);
 static void prv_select_raw_up_handler(ClickRecognizerRef recognizer, void *context);
 
@@ -135,10 +177,10 @@ static GRect prv_reader_body_frame_for_bounds(GRect bounds) {
 #if defined(PBL_ROUND)
   return GRect(BIBBLE_ROUND_READER_SIDE_INSET, BIBBLE_ROUND_READER_TOP_INSET,
                bounds.size.w - (BIBBLE_ROUND_READER_SIDE_INSET * 2),
-               bounds.size.h - BIBBLE_READER_FOOTER_HEIGHT - BIBBLE_ROUND_READER_TOP_INSET -
-                   BIBBLE_ROUND_READER_BOTTOM_GAP);
+               bounds.size.h - BIBBLE_ROUND_READER_TOP_INSET - BIBBLE_ROUND_READER_BOTTOM_GAP);
 #else
-  return GRect(4, 4, bounds.size.w - 8, bounds.size.h - BIBBLE_READER_FOOTER_HEIGHT - 8);
+  return GRect(4, BIBBLE_READER_HEADER_HEIGHT + 4, bounds.size.w - 8,
+               bounds.size.h - BIBBLE_READER_HEADER_HEIGHT - 8);
 #endif
 }
 
@@ -220,6 +262,61 @@ static void prv_format_chapter_reference(char *dest, size_t dest_size, uint8_t b
   snprintf(dest, dest_size, "%s %u", BIBBLE_BOOK_NAMES[book], chapter);
 }
 
+static void prv_update_reader_time(void) {
+  time_t now = time(NULL);
+  struct tm *local_time = localtime(&now);
+
+  if (!local_time) {
+    prv_copy_string(s_reader_time, sizeof(s_reader_time), "");
+  } else if (clock_is_24h_style()) {
+    strftime(s_reader_time, sizeof(s_reader_time), "%H:%M", local_time);
+  } else {
+    strftime(s_reader_time, sizeof(s_reader_time), "%I:%M", local_time);
+    if (s_reader_time[0] == '0') {
+      memmove(s_reader_time, s_reader_time + 1, strlen(s_reader_time));
+    }
+  }
+
+  if (s_reader_time_layer) {
+    text_layer_set_text(s_reader_time_layer, s_reader_time);
+  }
+}
+
+static void prv_restore_reader_header(void) {
+#if defined(PBL_ROUND)
+  if (s_current_book < BIBBLE_BOOK_COUNT) {
+    snprintf(s_reader_reference, sizeof(s_reader_reference), "%s %u",
+             BIBBLE_BOOK_SHORT_NAMES[s_current_book], s_current_chapter);
+  } else {
+    prv_copy_string(s_reader_reference, sizeof(s_reader_reference), s_current_reference);
+  }
+#else
+  prv_copy_string(s_reader_reference, sizeof(s_reader_reference), s_current_reference);
+#endif
+
+  if (s_reader_reference_layer) {
+    text_layer_set_text(s_reader_reference_layer, s_reader_reference);
+  }
+  prv_update_reader_time();
+}
+
+static void prv_set_reader_header_label(const char *label) {
+  if (s_reader_reference_layer) {
+    text_layer_set_text(s_reader_reference_layer, label ? label : "");
+  }
+}
+
+static void prv_minute_tick_handler(struct tm *tick_time, TimeUnits units_changed) {
+  (void)tick_time;
+  (void)units_changed;
+  prv_update_reader_time();
+}
+
+static void prv_reader_header_update_proc(Layer *layer, GContext *ctx) {
+  graphics_context_set_fill_color(ctx, GColorTiffanyBlue);
+  graphics_fill_rect(ctx, layer_get_bounds(layer), 0, GCornerNone);
+}
+
 static void prv_set_status(const char *status) {
   prv_copy_string(s_status, sizeof(s_status), status);
   prv_update_active_status_layer();
@@ -269,11 +366,13 @@ static void prv_update_active_status_layer(void) {
   }
 }
 
-static bool prv_send_message(const char *type, const char *payload) {
+static bool prv_send_message_internal(const char *type, const char *payload, bool report_error) {
   DictionaryIterator *iter;
   AppMessageResult result = app_message_outbox_begin(&iter);
   if (result != APP_MSG_OK || !iter) {
-    prv_set_status("Phone link not ready");
+    if (report_error) {
+      prv_set_status("Phone link not ready");
+    }
     return false;
   }
 
@@ -281,10 +380,212 @@ static bool prv_send_message(const char *type, const char *payload) {
   dict_write_cstring(iter, MESSAGE_KEY_Payload, payload ? payload : "");
   result = app_message_outbox_send();
   if (result != APP_MSG_OK) {
-    prv_set_status("Phone send failed");
+    if (report_error) {
+      prv_set_status("Phone send failed");
+    }
     return false;
   }
   return true;
+}
+
+static bool prv_send_message(const char *type, const char *payload) {
+  return prv_send_message_internal(type, payload, true);
+}
+
+static BibbleCachedPage *prv_cache_find(uint8_t book, uint8_t chapter, uint16_t page) {
+  uint8_t index;
+
+  for (index = 0; index < BIBBLE_PAGE_CACHE_SIZE; index += 1) {
+    BibbleCachedPage *entry = &s_page_cache[index];
+    if (entry->valid && entry->book == book && entry->chapter == chapter && entry->page == page) {
+      entry->last_used = ++s_page_cache_clock;
+      return entry;
+    }
+  }
+  return NULL;
+}
+
+static BibbleCachedPage *prv_cache_store(uint8_t book, uint8_t chapter, uint8_t verse, uint16_t page,
+                                         uint16_t page_count, const char *text) {
+  BibbleCachedPage *entry = NULL;
+  uint8_t index;
+
+  for (index = 0; index < BIBBLE_PAGE_CACHE_SIZE; index += 1) {
+    BibbleCachedPage *candidate = &s_page_cache[index];
+    if (candidate->valid && candidate->book == book && candidate->chapter == chapter && candidate->page == page) {
+      entry = candidate;
+      break;
+    }
+  }
+
+  if (!entry) {
+    for (index = 0; index < BIBBLE_PAGE_CACHE_SIZE; index += 1) {
+      BibbleCachedPage *candidate = &s_page_cache[index];
+      if (!candidate->valid) {
+        entry = candidate;
+        break;
+      }
+      if (!entry || candidate->last_used < entry->last_used) {
+        entry = candidate;
+      }
+    }
+  }
+
+  if (!entry) {
+    return NULL;
+  }
+
+  entry->valid = true;
+  entry->book = book;
+  entry->chapter = chapter;
+  entry->verse = verse ? verse : 1;
+  entry->page = page ? page : 1;
+  entry->page_count = page_count ? page_count : 1;
+  entry->last_used = ++s_page_cache_clock;
+  prv_copy_string(entry->text, sizeof(entry->text), text && text[0] ? text : "No text");
+  return entry;
+}
+
+static BibbleCachedPage *prv_cache_find_adjacent(uint8_t book, uint8_t chapter, uint16_t page,
+                                                  uint16_t page_count, int direction) {
+  uint8_t adjacent_book = book;
+  uint8_t adjacent_chapter = chapter;
+  uint8_t index;
+
+  if (direction > 0) {
+    if (page < page_count) {
+      return prv_cache_find(book, chapter, page + 1);
+    }
+    if (chapter < prv_chapter_count(book)) {
+      adjacent_chapter += 1;
+    } else if (book + 1 < BIBBLE_BOOK_COUNT) {
+      adjacent_book += 1;
+      adjacent_chapter = 1;
+    } else {
+      return NULL;
+    }
+    return prv_cache_find(adjacent_book, adjacent_chapter, 1);
+  }
+
+  if (page > 1) {
+    return prv_cache_find(book, chapter, page - 1);
+  }
+  if (chapter > 1) {
+    adjacent_chapter -= 1;
+  } else if (book > 0) {
+    adjacent_book -= 1;
+    adjacent_chapter = prv_chapter_count(adjacent_book);
+  } else {
+    return NULL;
+  }
+
+  for (index = 0; index < BIBBLE_PAGE_CACHE_SIZE; index += 1) {
+    BibbleCachedPage *entry = &s_page_cache[index];
+    if (entry->valid && entry->book == adjacent_book && entry->chapter == adjacent_chapter &&
+        entry->page == entry->page_count) {
+      entry->last_used = ++s_page_cache_clock;
+      return entry;
+    }
+  }
+  return NULL;
+}
+
+static void prv_apply_cached_page(BibbleCachedPage *entry) {
+  if (!entry || !entry->valid) {
+    return;
+  }
+
+  if (window_stack_get_top_window() != s_reader_window) {
+    prv_show_reader_window(entry->book, entry->chapter, entry->verse, false);
+  }
+
+  s_current_book = entry->book;
+  s_current_chapter = entry->chapter;
+  s_current_verse = entry->verse;
+  s_current_page = entry->page;
+  s_page_count = entry->page_count;
+  s_reader_loading = false;
+  entry->last_used = ++s_page_cache_clock;
+  prv_format_chapter_reference(s_current_reference, sizeof(s_current_reference), entry->book, entry->chapter);
+  prv_copy_string(s_reader_text, sizeof(s_reader_text), entry->text);
+  prv_update_reader_layers(true);
+  prv_start_prefetch();
+}
+
+static bool prv_show_cached_adjacent(int direction) {
+  BibbleCachedPage *entry = prv_cache_find_adjacent(s_current_book, s_current_chapter, s_current_page,
+                                                     s_page_count, direction);
+  if (!entry) {
+    return false;
+  }
+  prv_apply_cached_page(entry);
+  return true;
+}
+
+static void prv_set_cursor_from_page(BibblePageCursor *cursor, const BibbleCachedPage *entry) {
+  if (!cursor || !entry) {
+    return;
+  }
+  cursor->book = entry->book;
+  cursor->chapter = entry->chapter;
+  cursor->page = entry->page;
+  cursor->page_count = entry->page_count;
+}
+
+static bool prv_cursor_is_boundary(const BibblePageCursor *cursor, int direction) {
+  if (direction > 0) {
+    return cursor->book + 1 == BIBBLE_BOOK_COUNT &&
+           cursor->chapter == prv_chapter_count(cursor->book) && cursor->page >= cursor->page_count;
+  }
+  return cursor->book == 0 && cursor->chapter == 1 && cursor->page <= 1;
+}
+
+static void prv_continue_prefetch(void) {
+  while (s_prefetch_step < BIBBLE_PREFETCH_STEP_COUNT) {
+    BibbleCachedPage *cached;
+    BibblePageCursor *cursor;
+    char payload[64];
+    int direction = BIBBLE_PREFETCH_DIRECTIONS[s_prefetch_step];
+
+    cursor = direction > 0 ? &s_prefetch_forward_cursor : &s_prefetch_backward_cursor;
+    if (prv_cursor_is_boundary(cursor, direction)) {
+      s_prefetch_step += 1;
+      continue;
+    }
+
+    cached = prv_cache_find_adjacent(cursor->book, cursor->chapter, cursor->page, cursor->page_count, direction);
+    if (cached) {
+      prv_set_cursor_from_page(cursor, cached);
+      s_prefetch_step += 1;
+      continue;
+    }
+
+    snprintf(payload, sizeof(payload), "%u|%u|%u|%d|%u", cursor->book, cursor->chapter,
+             cursor->page, direction, s_prefetch_generation);
+    if (prv_send_message_internal(BIBBLE_MSG_PREFETCH_REQUEST, payload, false)) {
+      s_prefetch_direction = direction;
+      s_prefetch_in_flight = true;
+    }
+    return;
+  }
+  s_prefetch_in_flight = false;
+}
+
+static void prv_start_prefetch(void) {
+  s_prefetch_generation += 1;
+  if (!s_prefetch_generation) {
+    s_prefetch_generation = 1;
+  }
+  s_prefetch_step = 0;
+  s_prefetch_in_flight = false;
+  s_prefetch_forward_cursor = (BibblePageCursor) {
+    .book = s_current_book,
+    .chapter = s_current_chapter,
+    .page = s_current_page,
+    .page_count = s_page_count,
+  };
+  s_prefetch_backward_cursor = s_prefetch_forward_cursor;
+  prv_continue_prefetch();
 }
 
 static void prv_ready_timer_callback(void *context) {
@@ -296,11 +597,8 @@ static void prv_ready_timer_callback(void *context) {
 static void prv_request_page(uint8_t book, uint8_t chapter, uint8_t verse, uint16_t page) {
   char payload[48];
 
-  s_current_book = book;
-  s_current_chapter = chapter;
-  if (verse > 0) {
-    s_current_verse = verse;
-  }
+  s_prefetch_generation += 1;
+  s_prefetch_in_flight = false;
   s_reader_loading = true;
 
   snprintf(payload, sizeof(payload), "%u|%u|%u|%u", book, chapter, verse, page);
@@ -333,6 +631,9 @@ static void prv_request_next_page(void) {
   if (s_reader_loading) {
     return;
   }
+  if (prv_show_cached_adjacent(1)) {
+    return;
+  }
   if (s_current_page < s_page_count) {
     prv_request_page(book, chapter, 0, s_current_page + 1);
     return;
@@ -345,9 +646,7 @@ static void prv_request_next_page(void) {
     prv_request_page(book + 1, 1, 1, 1);
     return;
   }
-  if (s_reader_footer_layer) {
-    text_layer_set_text(s_reader_footer_layer, "End");
-  }
+  prv_set_reader_header_label("End");
 }
 
 static void prv_request_previous_page(void) {
@@ -355,6 +654,9 @@ static void prv_request_previous_page(void) {
   uint8_t chapter = s_current_chapter;
 
   if (s_reader_loading) {
+    return;
+  }
+  if (prv_show_cached_adjacent(-1)) {
     return;
   }
   if (s_current_page > 1) {
@@ -370,9 +672,7 @@ static void prv_request_previous_page(void) {
     prv_request_page(book, prv_chapter_count(book), 0, 999);
     return;
   }
-  if (s_reader_footer_layer) {
-    text_layer_set_text(s_reader_footer_layer, "Beginning");
-  }
+  prv_set_reader_header_label("Beginning");
 }
 
 static uint16_t prv_grid_item_count(BibbleGridKind kind) {
@@ -831,16 +1131,52 @@ static void prv_update_reader_layers(bool reset_scroll) {
     scroll_layer_set_content_offset(s_reader_scroll_layer, GPointZero, false);
   }
 
-  if (s_reader_footer_layer) {
-    text_layer_set_text(s_reader_footer_layer, s_current_reference);
-  }
+  prv_restore_reader_header();
 }
 
 static void prv_reader_window_load(Window *window) {
   Layer *root = window_get_root_layer(window);
   GRect bounds = layer_get_bounds(root);
-  GRect footer_frame = GRect(0, bounds.size.h - BIBBLE_READER_FOOTER_HEIGHT, bounds.size.w, BIBBLE_READER_FOOTER_HEIGHT);
   GRect body_frame = prv_reader_body_frame_for_bounds(bounds);
+  GRect header_frame;
+  GRect reference_frame;
+  GRect time_frame;
+
+#if defined(PBL_ROUND)
+  header_frame = GRect(0, 0, bounds.size.w, BIBBLE_ROUND_READER_HEADER_HEIGHT);
+  reference_frame = GRect(BIBBLE_ROUND_READER_HEADER_SIDE_INSET, 4,
+                          bounds.size.w - (BIBBLE_ROUND_READER_HEADER_SIDE_INSET * 2) -
+                              BIBBLE_READER_HEADER_TIME_WIDTH,
+                          BIBBLE_READER_HEADER_HEIGHT);
+  time_frame = GRect(bounds.size.w - BIBBLE_ROUND_READER_HEADER_SIDE_INSET -
+                         BIBBLE_READER_HEADER_TIME_WIDTH,
+                     4, BIBBLE_READER_HEADER_TIME_WIDTH, BIBBLE_READER_HEADER_HEIGHT);
+#else
+  header_frame = GRect(0, 0, bounds.size.w, BIBBLE_READER_HEADER_HEIGHT);
+  reference_frame = GRect(4, 0, bounds.size.w - BIBBLE_READER_HEADER_TIME_WIDTH - 8,
+                          BIBBLE_READER_HEADER_HEIGHT);
+  time_frame = GRect(bounds.size.w - BIBBLE_READER_HEADER_TIME_WIDTH - 4, 0,
+                     BIBBLE_READER_HEADER_TIME_WIDTH, BIBBLE_READER_HEADER_HEIGHT);
+#endif
+
+  s_reader_header_layer = layer_create(header_frame);
+  layer_set_update_proc(s_reader_header_layer, prv_reader_header_update_proc);
+  layer_add_child(root, s_reader_header_layer);
+
+  s_reader_reference_layer = text_layer_create(reference_frame);
+  text_layer_set_font(s_reader_reference_layer, fonts_get_system_font(FONT_KEY_GOTHIC_14));
+  text_layer_set_overflow_mode(s_reader_reference_layer, GTextOverflowModeTrailingEllipsis);
+  text_layer_set_background_color(s_reader_reference_layer, GColorClear);
+  text_layer_set_text_color(s_reader_reference_layer, GColorBlack);
+  layer_add_child(s_reader_header_layer, text_layer_get_layer(s_reader_reference_layer));
+
+  s_reader_time_layer = text_layer_create(time_frame);
+  text_layer_set_font(s_reader_time_layer, fonts_get_system_font(FONT_KEY_GOTHIC_14));
+  text_layer_set_overflow_mode(s_reader_time_layer, GTextOverflowModeFill);
+  text_layer_set_background_color(s_reader_time_layer, GColorClear);
+  text_layer_set_text_color(s_reader_time_layer, GColorBlack);
+  text_layer_set_text_alignment(s_reader_time_layer, GTextAlignmentRight);
+  layer_add_child(s_reader_header_layer, text_layer_get_layer(s_reader_time_layer));
 
   s_reader_scroll_layer = scroll_layer_create(body_frame);
   scroll_layer_set_shadow_hidden(s_reader_scroll_layer, true);
@@ -857,24 +1193,23 @@ static void prv_reader_window_load(Window *window) {
   text_layer_set_background_color(s_reader_body_layer, GColorClear);
   scroll_layer_add_child(s_reader_scroll_layer, text_layer_get_layer(s_reader_body_layer));
 
-  s_reader_footer_layer = text_layer_create(footer_frame);
-  text_layer_set_font(s_reader_footer_layer, fonts_get_system_font(FONT_KEY_GOTHIC_14));
-  text_layer_set_background_color(s_reader_footer_layer, GColorBlack);
-  text_layer_set_text_color(s_reader_footer_layer, GColorWhite);
-  text_layer_set_text_alignment(s_reader_footer_layer, GTextAlignmentCenter);
-  layer_add_child(root, text_layer_get_layer(s_reader_footer_layer));
-
   prv_update_reader_layers(true);
 }
 
 static void prv_reader_window_unload(Window *window) {
   (void)window;
+  s_prefetch_generation += 1;
+  s_prefetch_in_flight = false;
   text_layer_destroy(s_reader_body_layer);
   scroll_layer_destroy(s_reader_scroll_layer);
-  text_layer_destroy(s_reader_footer_layer);
+  text_layer_destroy(s_reader_reference_layer);
+  text_layer_destroy(s_reader_time_layer);
+  layer_destroy(s_reader_header_layer);
   s_reader_body_layer = NULL;
   s_reader_scroll_layer = NULL;
-  s_reader_footer_layer = NULL;
+  s_reader_reference_layer = NULL;
+  s_reader_time_layer = NULL;
+  s_reader_header_layer = NULL;
 }
 
 static void prv_show_reader_window(uint8_t book, uint8_t chapter, uint8_t verse, bool request_page) {
@@ -884,6 +1219,9 @@ static void prv_show_reader_window(uint8_t book, uint8_t chapter, uint8_t verse,
   if (!verse) {
     verse = 1;
   }
+
+  s_prefetch_generation += 1;
+  s_prefetch_in_flight = false;
 
   s_current_book = book;
   s_current_chapter = chapter;
@@ -968,11 +1306,13 @@ static void prv_scroll_reader_by(int dy) {
     next_y = 0;
     if (dy > 0) {
       prv_request_previous_page();
+      return;
     }
   } else if (next_y < min_y) {
     next_y = min_y;
     if (dy < 0) {
       prv_request_next_page();
+      return;
     }
   }
 
@@ -1135,17 +1475,13 @@ static void prv_dictation_callback(DictationSession *session, DictationSessionSt
 
   if (status != DictationSessionStatusSuccess || !transcription || !transcription[0]) {
     prv_set_status(prv_dictation_status_text(status));
-    if (s_reader_footer_layer) {
-      text_layer_set_text(s_reader_footer_layer, s_status);
-    }
+    prv_set_reader_header_label(s_status);
     return;
   }
 
   prv_copy_payload_field(clean_text, sizeof(clean_text), transcription);
   prv_set_status(clean_text);
-  if (s_reader_footer_layer) {
-    text_layer_set_text(s_reader_footer_layer, "Parsing");
-  }
+  prv_set_reader_header_label("Parsing");
   prv_send_message(BIBBLE_MSG_DICTATION_LOOKUP, clean_text);
 }
 #endif
@@ -1154,23 +1490,25 @@ static void prv_start_dictation(void) {
 #if defined(PBL_MICROPHONE)
   if (!s_dictation_session) {
     prv_set_status("Voice unavailable");
+    prv_set_reader_header_label(s_status);
     return;
   }
   prv_set_status("Listening");
-  if (s_reader_footer_layer) {
-    text_layer_set_text(s_reader_footer_layer, "Listening");
-  }
+  prv_set_reader_header_label("Listening");
   if (dictation_session_start(s_dictation_session) != DictationSessionStatusSuccess) {
     prv_set_status("Voice unavailable");
+    prv_set_reader_header_label(s_status);
   }
 #else
   prv_set_status("No microphone");
+  prv_set_reader_header_label(s_status);
 #endif
 }
 
 static void prv_handle_page(const char *payload) {
   char buffer[BIBBLE_PAYLOAD_LENGTH];
   char *cursor = buffer;
+  BibbleCachedPage *entry;
   uint8_t book;
   uint8_t chapter;
   uint8_t verse;
@@ -1189,20 +1527,47 @@ static void prv_handle_page(const char *payload) {
   if (book >= BIBBLE_BOOK_COUNT || chapter < 1 || chapter > prv_chapter_count(book)) {
     return;
   }
+  entry = prv_cache_store(book, chapter, verse, page, page_count, text);
+  prv_apply_cached_page(entry);
+}
 
-  if (window_stack_get_top_window() != s_reader_window) {
-    prv_show_reader_window(book, chapter, verse ? verse : 1, false);
+static void prv_handle_prefetch_page(const char *payload) {
+  char buffer[BIBBLE_PAYLOAD_LENGTH];
+  char *cursor = buffer;
+  BibbleCachedPage *entry;
+  BibblePageCursor *prefetch_cursor;
+  uint16_t generation;
+  uint8_t book;
+  uint8_t chapter;
+  uint8_t verse;
+  uint16_t page;
+  uint16_t page_count;
+  const char *text;
+
+  prv_copy_string(buffer, sizeof(buffer), payload);
+  generation = (uint16_t)atoi(prv_next_field(&cursor));
+  book = (uint8_t)atoi(prv_next_field(&cursor));
+  chapter = (uint8_t)atoi(prv_next_field(&cursor));
+  verse = (uint8_t)atoi(prv_next_field(&cursor));
+  page = (uint16_t)atoi(prv_next_field(&cursor));
+  page_count = (uint16_t)atoi(prv_next_field(&cursor));
+  text = prv_next_field(&cursor);
+
+  if (book >= BIBBLE_BOOK_COUNT || chapter < 1 || chapter > prv_chapter_count(book)) {
+    return;
   }
 
-  s_current_book = book;
-  s_current_chapter = chapter;
-  s_current_verse = verse ? verse : 1;
-  s_current_page = page ? page : 1;
-  s_page_count = page_count ? page_count : 1;
-  s_reader_loading = false;
-  prv_format_chapter_reference(s_current_reference, sizeof(s_current_reference), book, chapter);
-  prv_copy_string(s_reader_text, sizeof(s_reader_text), text && text[0] ? text : "No text");
-  prv_update_reader_layers(true);
+  entry = prv_cache_store(book, chapter, verse, page, page_count, text);
+  if (!entry || generation != s_prefetch_generation || !s_prefetch_in_flight ||
+      s_prefetch_step >= BIBBLE_PREFETCH_STEP_COUNT) {
+    return;
+  }
+
+  prefetch_cursor = s_prefetch_direction > 0 ? &s_prefetch_forward_cursor : &s_prefetch_backward_cursor;
+  prv_set_cursor_from_page(prefetch_cursor, entry);
+  s_prefetch_in_flight = false;
+  s_prefetch_step += 1;
+  prv_continue_prefetch();
 }
 
 static void prv_handle_navigate(const char *payload) {
@@ -1248,13 +1613,13 @@ static void prv_inbox_received(DictionaryIterator *iter, void *context) {
     }
   } else if (strcmp(type, BIBBLE_MSG_PAGE) == 0) {
     prv_handle_page(payload);
+  } else if (strcmp(type, BIBBLE_MSG_PREFETCH_PAGE) == 0) {
+    prv_handle_prefetch_page(payload);
   } else if (strcmp(type, BIBBLE_MSG_NAVIGATE) == 0) {
     prv_handle_navigate(payload);
   } else if (strcmp(type, BIBBLE_MSG_ERROR) == 0) {
     prv_set_status(payload[0] ? payload : "Error");
-    if (s_reader_footer_layer) {
-      text_layer_set_text(s_reader_footer_layer, s_status);
-    }
+    prv_set_reader_header_label(s_status);
   }
 }
 
@@ -1262,17 +1627,24 @@ static void prv_inbox_dropped(AppMessageResult reason, void *context) {
   (void)reason;
   (void)context;
   prv_set_status("Phone message dropped");
+  prv_set_reader_header_label(s_status);
 }
 
 static void prv_outbox_failed(DictionaryIterator *iter, AppMessageResult reason, void *context) {
-  (void)iter;
+  Tuple *type_tuple = iter ? dict_find(iter, MESSAGE_KEY_MessageType) : NULL;
+  const char *type = type_tuple ? type_tuple->value->cstring : "";
+
   (void)reason;
   (void)context;
+
+  if (strcmp(type, BIBBLE_MSG_PREFETCH_REQUEST) == 0) {
+    s_prefetch_in_flight = false;
+    return;
+  }
+
   s_reader_loading = false;
   prv_set_status("Phone link failed");
-  if (s_reader_footer_layer) {
-    text_layer_set_text(s_reader_footer_layer, s_status);
-  }
+  prv_set_reader_header_label(s_status);
 }
 
 static BibbleGridKind prv_active_grid(void) {
@@ -1443,6 +1815,7 @@ static void prv_init(void) {
   app_message_register_inbox_dropped(prv_inbox_dropped);
   app_message_register_outbox_failed(prv_outbox_failed);
   app_message_open(640, 256);
+  tick_timer_service_subscribe(MINUTE_UNIT, prv_minute_tick_handler);
 
 #if defined(PBL_MICROPHONE)
   s_dictation_session = dictation_session_create(BIBBLE_DICTATION_LENGTH, prv_dictation_callback, NULL);
@@ -1463,6 +1836,7 @@ static void prv_init(void) {
 }
 
 static void prv_deinit(void) {
+  tick_timer_service_unsubscribe();
   if (s_ready_timer) {
     app_timer_cancel(s_ready_timer);
     s_ready_timer = NULL;

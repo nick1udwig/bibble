@@ -44,6 +44,8 @@ ref("first john two one", "1 John", 2, 1);
 ref("1st Corinthians 13:4", "1 Corinthians", 13, 4);
 ref("Song of Solomon 2 1", "Song of Solomon", 2, 1);
 ref("the Song of Solomon 2 1", "Song of Solomon", 2, 1);
+ref("bruce", "Hebrews", 0, 0);
+ref("bruce one", "Hebrews", 1, 1);
 ref("jn one one", "Jonah", 1, 1);
 ref("jn four eleven", "Jonah", 4, 11);
 ref("Jude 5", "Jude", 1, 5);

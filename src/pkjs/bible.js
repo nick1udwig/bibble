@@ -54,6 +54,7 @@ var MANUAL_ALIASES = {
   53: ["1 tim", "1 timothy", "first timothy", "one timothy"],
   54: ["2 tim", "2 timothy", "second timothy", "two timothy"],
   56: ["philem", "filemon"],
+  57: ["bruce"],
   58: ["jas"],
   59: ["1 pet", "1 peter", "first peter", "one peter"],
   60: ["2 pet", "2 peter", "second peter", "two peter"],

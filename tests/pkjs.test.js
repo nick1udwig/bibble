@@ -278,6 +278,59 @@ withPkjs({
   });
 });
 
+var prefetchCalls = [];
+withPkjs({
+  bible: pageBibleFake(prefetchCalls)
+}, function(pebble) {
+  pebble.emit("appmessage", {
+    payload: {
+      MessageType: "prefetch_request",
+      Payload: "42|3|2|-1|17"
+    }
+  });
+  pebble.emit("appmessage", {
+    payload: {
+      MessageType: "prefetch_request",
+      Payload: "42|3|2|1|17"
+    }
+  });
+
+  assert.deepStrictEqual(prefetchCalls, [
+    ["adjacent", 42, 3, 2, -1],
+    ["adjacent", 42, 3, 2, 1]
+  ]);
+  assert.deepStrictEqual(pebble.sent[0], {
+    0: "prefetch_page",
+    1: "17|42|3|1|2|5|previous"
+  });
+  assert.deepStrictEqual(pebble.sent[1], {
+    0: "prefetch_page",
+    1: "17|42|3|1|2|5|next"
+  });
+});
+
+var badPrefetchCalls = [];
+withPkjs({
+  bible: pageBibleFake(badPrefetchCalls)
+}, function(pebble) {
+  [
+    "42|3|0|1|1",
+    "42|3|2|0|1",
+    "42|3|2|1|-1",
+    "42|3|2|1|oops"
+  ].forEach(function(payload) {
+    pebble.emit("appmessage", {
+      payload: {
+        MessageType: "prefetch_request",
+        Payload: payload
+      }
+    });
+  });
+
+  assert.deepStrictEqual(badPrefetchCalls, []);
+  assert.deepStrictEqual(pebble.sent, []);
+});
+
 var malformedPageCalls = [];
 withPkjs({
   bible: pageBibleFake(malformedPageCalls)
