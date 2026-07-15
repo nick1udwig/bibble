@@ -23,6 +23,40 @@ function withXmlHttpRequest(mock, work) {
   }
 }
 
+function withLocalStorage(storage, work) {
+  var previous = global.localStorage;
+  global.localStorage = storage;
+  try {
+    work();
+  } finally {
+    if (previous === undefined) {
+      delete global.localStorage;
+    } else {
+      global.localStorage = previous;
+    }
+  }
+}
+
+function memoryStorage() {
+  var values = {};
+  var reads = [];
+
+  return {
+    reads: reads,
+    values: values,
+    getItem: function(key) {
+      reads.push(key);
+      return Object.prototype.hasOwnProperty.call(values, key) ? values[key] : null;
+    },
+    setItem: function(key, value) {
+      values[key] = String(value);
+    },
+    removeItem: function(key) {
+      delete values[key];
+    }
+  };
+}
+
 withXmlHttpRequest(function ThrowingRequest() {
   this.open = function() {};
   this.send = function() {
@@ -102,6 +136,55 @@ withXmlHttpRequest(function HangingRequest() {
   assert.strictEqual(Bible.loadState(), "ready");
   assert.strictEqual(Bible.isLoaded(), true);
   assert.strictEqual(callbackCount, 1, "direct load should flush pending callbacks");
+});
+
+withLocalStorage(memoryStorage(), function() {
+  var storage = global.localStorage;
+  var Bible = freshBible();
+  var RestoredBible;
+  var callbackCount = 0;
+  var requestCount = 0;
+  var page;
+
+  Bible.loadFromBooks(testBooks());
+  assert.strictEqual(storage.values["bibble.kjv-books-v1.complete"], "kjv-books-v1");
+  assert(storage.values["bibble.kjv-books-v1.book.42"], "John should be persisted separately");
+
+  withXmlHttpRequest(function UnexpectedRequest() {
+    requestCount += 1;
+  }, function() {
+    RestoredBible = freshBible();
+    assert.strictEqual(RestoredBible.isLoaded(), false, "persistent marker should load only after ready work");
+    RestoredBible.ensureLoaded(function(error) {
+      callbackCount += 1;
+      assert.strictEqual(error, null);
+    });
+  });
+
+  assert.strictEqual(requestCount, 0, "restoring persistent corpus should not make a network request");
+  assert.strictEqual(callbackCount, 1);
+  assert.strictEqual(RestoredBible.isLoaded(), true);
+  page = RestoredBible.getChapterPage(42, 3, 16, 0);
+  assert(page.text.indexOf("16. John 3:16") !== -1);
+  assert(storage.reads.indexOf("bibble.kjv-books-v1.book.42") !== -1, "requested book should hydrate");
+  assert.strictEqual(storage.reads.indexOf("bibble.kjv-books-v1.book.0"), -1, "unrequested books should stay cold");
+});
+
+withLocalStorage((function() {
+  var storage = memoryStorage();
+  storage.setItem = function() {
+    throw new Error("quota exceeded");
+  };
+  return storage;
+})(), function() {
+  var Bible = freshBible();
+  var page;
+
+  assert.doesNotThrow(function() {
+    Bible.loadFromBooks(testBooks());
+  });
+  page = Bible.getChapterPage(42, 3, 16, 0);
+  assert(page.text.indexOf("16. John 3:16") !== -1, "storage failure should retain in-memory corpus");
 });
 
 withXmlHttpRequest(function SuccessfulRequest() {

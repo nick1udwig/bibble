@@ -36,7 +36,7 @@ var loadingBible = false;
 
 Pebble.addEventListener("ready", function() {
   sendStatus("Select a book");
-  startBibleDownload();
+  ensureBibleReady();
 });
 
 Pebble.addEventListener("appmessage", function(event) {
@@ -45,7 +45,7 @@ Pebble.addEventListener("appmessage", function(event) {
 
   if (type === MessageType.ready) {
     sendStatus("Select a book");
-    startBibleDownload();
+    ensureBibleReady();
   } else if (type === MessageType.pageRequest) {
     handlePageRequest(payload);
   } else if (type === MessageType.prefetchRequest) {
@@ -150,10 +150,10 @@ function withBibleReady(work) {
   }
 
   pendingBibleWork.push(work);
-  startBibleDownload();
+  ensureBibleReady();
 }
 
-function startBibleDownload() {
+function ensureBibleReady() {
   if (Bible.isLoaded() || loadingBible) {
     return;
   }

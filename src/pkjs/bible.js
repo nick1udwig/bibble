@@ -5,6 +5,9 @@ var KJV_META = require("./bible-meta");
 var PAGE_CHAR_LIMIT = 360;
 var KJV_SOURCE_URL = "https://raw.githubusercontent.com/thiagobodruk/bible/master/json/en_kjv.json";
 var KJV_DOWNLOAD_TIMEOUT_MS = 30000;
+var KJV_STORAGE_VERSION = "kjv-books-v1";
+var KJV_STORAGE_MARKER_KEY = "bibble." + KJV_STORAGE_VERSION + ".complete";
+var KJV_STORAGE_BOOK_KEY_PREFIX = "bibble." + KJV_STORAGE_VERSION + ".book.";
 
 var MANUAL_ALIASES = {
   0: ["gen", "gn", "genesys"],
@@ -133,12 +136,13 @@ var NUMBER_WORDS = {
 var pageCache = {};
 var aliasCache = null;
 var kjvBooks = null;
+var corpusAvailable = false;
 var loadStateValue = "idle";
 var loadError = "";
 var loadCallbacks = [];
 
 function books() {
-  return kjvBooks || KJV_META;
+  return KJV_META;
 }
 
 function bookAt(bookIndex) {
@@ -146,9 +150,9 @@ function bookAt(bookIndex) {
 }
 
 function getChapterVerses(bookIndex, chapter) {
-  var book = bookAt(bookIndex);
+  var book = loadTextBook(bookIndex);
 
-  if (!kjvBooks || !book || !book.chapters || !book.chapters[chapter - 1]) {
+  if (!book || !book.chapters || !book.chapters[chapter - 1]) {
     return null;
   }
 
@@ -166,6 +170,143 @@ function cleanVerse(value) {
     })
     .replace(/\s+/g, " ")
     .trim();
+}
+
+function persistentStorage() {
+  try {
+    if (typeof localStorage !== "undefined" && localStorage &&
+        typeof localStorage.getItem === "function" && typeof localStorage.setItem === "function") {
+      return localStorage;
+    }
+  } catch (_) {
+  }
+  return null;
+}
+
+function storageBookKey(bookIndex) {
+  return KJV_STORAGE_BOOK_KEY_PREFIX + String(bookIndex);
+}
+
+function validateStoredChapters(chapters, bookIndex) {
+  var meta = KJV_META[bookIndex];
+  var chapterIndex;
+  var verseIndex;
+
+  if (!meta || !Array.isArray(chapters) || chapters.length !== meta.verseCounts.length) {
+    return false;
+  }
+  for (chapterIndex = 0; chapterIndex < chapters.length; chapterIndex += 1) {
+    if (!Array.isArray(chapters[chapterIndex]) ||
+        chapters[chapterIndex].length !== meta.verseCounts[chapterIndex]) {
+      return false;
+    }
+    for (verseIndex = 0; verseIndex < chapters[chapterIndex].length; verseIndex += 1) {
+      if (typeof chapters[chapterIndex][verseIndex] !== "string") {
+        return false;
+      }
+    }
+  }
+  return true;
+}
+
+function invalidatePersistentCorpus(storage) {
+  try {
+    if (storage && typeof storage.removeItem === "function") {
+      storage.removeItem(KJV_STORAGE_MARKER_KEY);
+    }
+  } catch (_) {
+  }
+  corpusAvailable = false;
+  kjvBooks = null;
+  loadStateValue = "error";
+  loadError = "Cached KJV data is invalid";
+}
+
+function loadTextBook(bookIndex) {
+  var storage;
+  var stored;
+  var chapters;
+
+  if (kjvBooks && kjvBooks[bookIndex]) {
+    return kjvBooks[bookIndex];
+  }
+  if (!corpusAvailable) {
+    return null;
+  }
+
+  storage = persistentStorage();
+  if (!storage) {
+    return null;
+  }
+  try {
+    stored = storage.getItem(storageBookKey(bookIndex));
+    chapters = stored ? JSON.parse(stored) : null;
+  } catch (_) {
+    chapters = null;
+  }
+  if (!validateStoredChapters(chapters, bookIndex)) {
+    invalidatePersistentCorpus(storage);
+    return null;
+  }
+
+  kjvBooks = kjvBooks || [];
+  kjvBooks[bookIndex] = {
+    chapters: chapters
+  };
+  return kjvBooks[bookIndex];
+}
+
+function restorePersistentCorpus() {
+  var storage = persistentStorage();
+
+  if (!storage) {
+    return false;
+  }
+  try {
+    if (storage.getItem(KJV_STORAGE_MARKER_KEY) !== KJV_STORAGE_VERSION) {
+      return false;
+    }
+  } catch (_) {
+    return false;
+  }
+
+  kjvBooks = [];
+  corpusAvailable = true;
+  loadStateValue = "ready";
+  loadError = "";
+  return true;
+}
+
+function persistNormalizedBooks(normalized) {
+  var storage = persistentStorage();
+  var written = 0;
+  var index;
+
+  if (!storage) {
+    return false;
+  }
+  try {
+    if (typeof storage.removeItem === "function") {
+      storage.removeItem(KJV_STORAGE_MARKER_KEY);
+    }
+    for (index = 0; index < normalized.length; index += 1) {
+      storage.setItem(storageBookKey(index), JSON.stringify(normalized[index].chapters));
+      written += 1;
+    }
+    storage.setItem(KJV_STORAGE_MARKER_KEY, KJV_STORAGE_VERSION);
+    return true;
+  } catch (_) {
+    if (typeof storage.removeItem === "function") {
+      try {
+        storage.removeItem(KJV_STORAGE_MARKER_KEY);
+        for (index = 0; index < written; index += 1) {
+          storage.removeItem(storageBookKey(index));
+        }
+      } catch (_) {
+      }
+    }
+    return false;
+  }
 }
 
 function normalizeDownloadedBooks(rawBooks) {
@@ -199,7 +340,14 @@ function normalizeDownloadedBooks(rawBooks) {
 }
 
 function loadFromBooks(rawBooks) {
-  kjvBooks = normalizeDownloadedBooks(rawBooks);
+  var normalized = normalizeDownloadedBooks(rawBooks);
+
+  corpusAvailable = true;
+  if (persistNormalizedBooks(normalized)) {
+    kjvBooks = [];
+  } else {
+    kjvBooks = normalized;
+  }
   pageCache = {};
   loadStateValue = "ready";
   loadError = "";
@@ -238,7 +386,7 @@ function ensureLoaded(callback) {
     failLoad(message);
   }
 
-  if (kjvBooks) {
+  if (corpusAvailable) {
     if (callback) {
       callback(null);
     }
@@ -249,6 +397,11 @@ function ensureLoaded(callback) {
     loadCallbacks.push(callback);
   }
   if (loadStateValue === "loading") {
+    return;
+  }
+
+  if (restorePersistentCorpus()) {
+    flushLoadCallbacks(null);
     return;
   }
 
@@ -306,7 +459,7 @@ function ensureLoaded(callback) {
 }
 
 function isLoaded() {
-  return !!kjvBooks;
+  return corpusAvailable;
 }
 
 function loadState() {
