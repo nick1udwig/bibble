@@ -31,6 +31,9 @@
 #define BIBBLE_ROUND_READER_HEADER_SIDE_INSET 76
 #define BIBBLE_PAGE_CACHE_SIZE 8
 #define BIBBLE_PREFETCH_STEP_COUNT 6
+#define BIBBLE_OUTBOX_QUEUE_SIZE 8
+#define BIBBLE_OUTBOX_TYPE_LENGTH 24
+#define BIBBLE_OUTBOX_RETRY_MS 50
 #define BIBBLE_READY_DELAY_MS 300
 #define BIBBLE_PAGE_REQUEST_DELAY_MS 120
 #define BIBBLE_SELECT_HOLD_MS 700
@@ -66,6 +69,7 @@ static TextLayer *s_reader_time_layer;
 static AppTimer *s_ready_timer;
 static AppTimer *s_page_request_timer;
 static AppTimer *s_select_hold_timer;
+static AppTimer *s_outbox_retry_timer;
 #if defined(PBL_MICROPHONE)
 static DictationSession *s_dictation_session;
 #endif
@@ -117,6 +121,13 @@ typedef struct {
   uint16_t page_count;
 } BibblePageCursor;
 
+typedef struct {
+  bool report_error;
+  bool prefetch;
+  char type[BIBBLE_OUTBOX_TYPE_LENGTH];
+  char payload[BIBBLE_DICTATION_LENGTH];
+} BibbleOutgoingMessage;
+
 static BibbleCachedPage s_page_cache[BIBBLE_PAGE_CACHE_SIZE];
 static uint32_t s_page_cache_clock;
 static uint16_t s_prefetch_generation;
@@ -125,6 +136,9 @@ static int8_t s_prefetch_direction;
 static bool s_prefetch_in_flight;
 static BibblePageCursor s_prefetch_forward_cursor;
 static BibblePageCursor s_prefetch_backward_cursor;
+static BibbleOutgoingMessage s_outbox_queue[BIBBLE_OUTBOX_QUEUE_SIZE];
+static uint8_t s_outbox_count;
+static bool s_outbox_busy;
 // Interleave the nearest pages in both directions, then spend the larger window on look-ahead.
 static const int8_t BIBBLE_PREFETCH_DIRECTIONS[BIBBLE_PREFETCH_STEP_COUNT] = {1, -1, 1, -1, 1, 1};
 
@@ -141,6 +155,7 @@ static void prv_update_active_status_layer(void);
 static void prv_update_reader_layers(bool reset_scroll);
 static void prv_start_prefetch(void);
 static bool prv_send_message(const char *type, const char *payload);
+static void prv_flush_outbox_queue(void);
 static void prv_request_page(uint8_t book, uint8_t chapter, uint8_t verse, uint16_t page);
 static void prv_schedule_page_request(uint8_t book, uint8_t chapter, uint8_t verse, uint16_t page);
 static void prv_show_chapter_window(uint8_t book, uint8_t chapter);
@@ -366,26 +381,147 @@ static void prv_update_active_status_layer(void) {
   }
 }
 
-static bool prv_send_message_internal(const char *type, const char *payload, bool report_error) {
-  DictionaryIterator *iter;
-  AppMessageResult result = app_message_outbox_begin(&iter);
-  if (result != APP_MSG_OK || !iter) {
+static void prv_remove_outbox_message(uint8_t index) {
+  uint8_t next;
+
+  if (index >= s_outbox_count) {
+    return;
+  }
+  for (next = index + 1; next < s_outbox_count; next += 1) {
+    s_outbox_queue[next - 1] = s_outbox_queue[next];
+  }
+  s_outbox_count -= 1;
+}
+
+static void prv_remove_queued_prefetch(void) {
+  uint8_t index = s_outbox_busy ? 1 : 0;
+
+  while (index < s_outbox_count) {
+    if (s_outbox_queue[index].prefetch) {
+      prv_remove_outbox_message(index);
+      s_prefetch_in_flight = false;
+    } else {
+      index += 1;
+    }
+  }
+}
+
+static void prv_outbox_retry_timer_callback(void *context) {
+  (void)context;
+  s_outbox_retry_timer = NULL;
+  prv_flush_outbox_queue();
+}
+
+static void prv_schedule_outbox_retry(void) {
+  if (!s_outbox_retry_timer) {
+    s_outbox_retry_timer = app_timer_register(BIBBLE_OUTBOX_RETRY_MS, prv_outbox_retry_timer_callback, NULL);
+  }
+}
+
+static void prv_report_outbox_failure(bool prefetch, bool report_error) {
+  if (prefetch) {
+    s_prefetch_in_flight = false;
+    return;
+  }
+  if (report_error) {
+    s_reader_loading = false;
+    prv_set_status("Phone link failed");
+    prv_set_reader_header_label(s_status);
+  }
+}
+
+static void prv_finish_outbox_message(bool sent) {
+  bool prefetch;
+  bool report_error;
+
+  if (!s_outbox_count) {
+    s_outbox_busy = false;
+    return;
+  }
+
+  prefetch = s_outbox_queue[0].prefetch;
+  report_error = s_outbox_queue[0].report_error;
+  prv_remove_outbox_message(0);
+  s_outbox_busy = false;
+  if (!sent) {
+    prv_report_outbox_failure(prefetch, report_error);
+  }
+  prv_flush_outbox_queue();
+}
+
+static bool prv_enqueue_outbox_message(const char *type, const char *payload, bool report_error) {
+  bool prefetch = type && strcmp(type, BIBBLE_MSG_PREFETCH_REQUEST) == 0;
+  uint8_t first_queued = s_outbox_busy ? 1 : 0;
+  uint8_t index;
+  BibbleOutgoingMessage *message;
+
+  if (!prefetch) {
+    prv_remove_queued_prefetch();
+
+    // Only the newest unsent page request matters.
+    if (type && strcmp(type, BIBBLE_MSG_PAGE_REQUEST) == 0) {
+      for (index = first_queued; index < s_outbox_count; index += 1) {
+        if (strcmp(s_outbox_queue[index].type, BIBBLE_MSG_PAGE_REQUEST) == 0) {
+          prv_copy_string(s_outbox_queue[index].payload, sizeof(s_outbox_queue[index].payload), payload);
+          prv_flush_outbox_queue();
+          return true;
+        }
+      }
+    }
+  }
+
+  if (s_outbox_count >= BIBBLE_OUTBOX_QUEUE_SIZE) {
     if (report_error) {
-      prv_set_status("Phone link not ready");
+      s_reader_loading = false;
+      prv_set_status("Phone queue full");
+      prv_set_reader_header_label(s_status);
     }
     return false;
   }
 
-  dict_write_cstring(iter, MESSAGE_KEY_MessageType, type ? type : "");
-  dict_write_cstring(iter, MESSAGE_KEY_Payload, payload ? payload : "");
-  result = app_message_outbox_send();
-  if (result != APP_MSG_OK) {
-    if (report_error) {
-      prv_set_status("Phone send failed");
-    }
-    return false;
-  }
+  message = &s_outbox_queue[s_outbox_count];
+  message->report_error = report_error;
+  message->prefetch = prefetch;
+  prv_copy_string(message->type, sizeof(message->type), type);
+  prv_copy_string(message->payload, sizeof(message->payload), payload);
+  s_outbox_count += 1;
+  prv_flush_outbox_queue();
   return true;
+}
+
+static void prv_flush_outbox_queue(void) {
+  DictionaryIterator *iter;
+  AppMessageResult result;
+
+  if (s_outbox_busy || !s_outbox_count) {
+    return;
+  }
+
+  result = app_message_outbox_begin(&iter);
+  if (result == APP_MSG_BUSY) {
+    prv_schedule_outbox_retry();
+    return;
+  }
+  if (result != APP_MSG_OK || !iter) {
+    prv_finish_outbox_message(false);
+    return;
+  }
+
+  dict_write_cstring(iter, MESSAGE_KEY_MessageType, s_outbox_queue[0].type);
+  dict_write_cstring(iter, MESSAGE_KEY_Payload, s_outbox_queue[0].payload);
+  s_outbox_busy = true;
+  result = app_message_outbox_send();
+  if (result == APP_MSG_BUSY) {
+    s_outbox_busy = false;
+    prv_schedule_outbox_retry();
+  } else if (result != APP_MSG_OK) {
+    s_outbox_busy = false;
+    prv_finish_outbox_message(false);
+  }
+}
+
+static bool prv_send_message_internal(const char *type, const char *payload, bool report_error) {
+  return prv_enqueue_outbox_message(type, payload, report_error);
 }
 
 static bool prv_send_message(const char *type, const char *payload) {
@@ -1630,21 +1766,17 @@ static void prv_inbox_dropped(AppMessageResult reason, void *context) {
   prv_set_reader_header_label(s_status);
 }
 
-static void prv_outbox_failed(DictionaryIterator *iter, AppMessageResult reason, void *context) {
-  Tuple *type_tuple = iter ? dict_find(iter, MESSAGE_KEY_MessageType) : NULL;
-  const char *type = type_tuple ? type_tuple->value->cstring : "";
+static void prv_outbox_sent(DictionaryIterator *iter, void *context) {
+  (void)iter;
+  (void)context;
+  prv_finish_outbox_message(true);
+}
 
+static void prv_outbox_failed(DictionaryIterator *iter, AppMessageResult reason, void *context) {
+  (void)iter;
   (void)reason;
   (void)context;
-
-  if (strcmp(type, BIBBLE_MSG_PREFETCH_REQUEST) == 0) {
-    s_prefetch_in_flight = false;
-    return;
-  }
-
-  s_reader_loading = false;
-  prv_set_status("Phone link failed");
-  prv_set_reader_header_label(s_status);
+  prv_finish_outbox_message(false);
 }
 
 static BibbleGridKind prv_active_grid(void) {
@@ -1813,6 +1945,7 @@ static void prv_touch_handler(const TouchEvent *event, void *context) {
 static void prv_init(void) {
   app_message_register_inbox_received(prv_inbox_received);
   app_message_register_inbox_dropped(prv_inbox_dropped);
+  app_message_register_outbox_sent(prv_outbox_sent);
   app_message_register_outbox_failed(prv_outbox_failed);
   app_message_open(640, 256);
   tick_timer_service_subscribe(MINUTE_UNIT, prv_minute_tick_handler);
@@ -1848,6 +1981,10 @@ static void prv_deinit(void) {
   if (s_select_hold_timer) {
     app_timer_cancel(s_select_hold_timer);
     s_select_hold_timer = NULL;
+  }
+  if (s_outbox_retry_timer) {
+    app_timer_cancel(s_outbox_retry_timer);
+    s_outbox_retry_timer = NULL;
   }
   if (s_reader_window) {
     window_destroy(s_reader_window);
