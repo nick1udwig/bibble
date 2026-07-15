@@ -43,6 +43,46 @@ withXmlHttpRequest(function ThrowingRequest() {
   assert.strictEqual(Bible.lastLoadError(), "KJV download failed");
 });
 
+withXmlHttpRequest(function FailingRequest() {
+  this.open = function() {};
+  this.send = function() {
+    this.onerror();
+    this.readyState = 4;
+    this.status = 0;
+    this.onreadystatechange();
+  };
+}, function() {
+  var Bible = freshBible();
+  var callbackCount = 0;
+
+  Bible.ensureLoaded(function(error) {
+    callbackCount += 1;
+    assert.strictEqual(error, "KJV download failed");
+  });
+
+  assert.strictEqual(callbackCount, 1, "network failure should settle once");
+  assert.strictEqual(Bible.loadState(), "error");
+});
+
+withXmlHttpRequest(function TimedOutRequest() {
+  this.open = function() {};
+  this.send = function() {
+    assert.strictEqual(this.timeout, 30000);
+    this.ontimeout();
+  };
+}, function() {
+  var Bible = freshBible();
+  var callbackCount = 0;
+
+  Bible.ensureLoaded(function(error) {
+    callbackCount += 1;
+    assert.strictEqual(error, "KJV download timed out");
+  });
+
+  assert.strictEqual(callbackCount, 1, "timeout should flush pending callbacks");
+  assert.strictEqual(Bible.loadState(), "error");
+});
+
 withXmlHttpRequest(function HangingRequest() {
   this.open = function() {};
   this.send = function() {};

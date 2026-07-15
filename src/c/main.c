@@ -34,6 +34,7 @@
 #define BIBBLE_OUTBOX_QUEUE_SIZE 8
 #define BIBBLE_OUTBOX_TYPE_LENGTH 24
 #define BIBBLE_OUTBOX_RETRY_MS 50
+#define BIBBLE_PAGE_RESPONSE_TIMEOUT_MS 30000
 #define BIBBLE_READY_DELAY_MS 300
 #define BIBBLE_PAGE_REQUEST_DELAY_MS 120
 #define BIBBLE_SELECT_HOLD_MS 700
@@ -70,6 +71,7 @@ static AppTimer *s_ready_timer;
 static AppTimer *s_page_request_timer;
 static AppTimer *s_select_hold_timer;
 static AppTimer *s_outbox_retry_timer;
+static AppTimer *s_page_response_timer;
 #if defined(PBL_MICROPHONE)
 static DictationSession *s_dictation_session;
 #endif
@@ -419,6 +421,13 @@ static void prv_remove_queued_page_requests(void) {
   }
 }
 
+static void prv_cancel_page_response_timer(void) {
+  if (s_page_response_timer) {
+    app_timer_cancel(s_page_response_timer);
+    s_page_response_timer = NULL;
+  }
+}
+
 static void prv_outbox_retry_timer_callback(void *context) {
   (void)context;
   s_outbox_retry_timer = NULL;
@@ -437,6 +446,7 @@ static void prv_report_outbox_failure(bool prefetch, bool report_error) {
     return;
   }
   if (report_error) {
+    prv_cancel_page_response_timer();
     s_reader_loading = false;
     prv_set_status("Phone link failed");
     prv_set_reader_header_label(s_status);
@@ -750,6 +760,22 @@ static void prv_invalidate_page_request(void) {
   }
 }
 
+static void prv_page_response_timeout_callback(void *context) {
+  (void)context;
+  s_page_response_timer = NULL;
+  prv_remove_queued_page_requests();
+  prv_invalidate_page_request();
+  s_reader_loading = false;
+  prv_set_status("Phone response timed out");
+  prv_set_reader_header_label(s_status);
+}
+
+static void prv_start_page_response_timer(void) {
+  prv_cancel_page_response_timer();
+  s_page_response_timer = app_timer_register(BIBBLE_PAGE_RESPONSE_TIMEOUT_MS,
+                                             prv_page_response_timeout_callback, NULL);
+}
+
 static void prv_request_page(uint8_t book, uint8_t chapter, uint8_t verse, uint16_t page) {
   char payload[48];
 
@@ -760,7 +786,9 @@ static void prv_request_page(uint8_t book, uint8_t chapter, uint8_t verse, uint1
 
   snprintf(payload, sizeof(payload), "%u|%u|%u|%u|%u", book, chapter, verse, page,
            s_page_request_generation);
-  prv_send_message(BIBBLE_MSG_PAGE_REQUEST, payload);
+  if (prv_send_message(BIBBLE_MSG_PAGE_REQUEST, payload)) {
+    prv_start_page_response_timer();
+  }
 }
 
 static void prv_page_request_timer_callback(void *context) {
@@ -788,6 +816,7 @@ static void prv_cancel_page_request(void) {
     s_page_request_timer = NULL;
   }
   prv_remove_queued_page_requests();
+  prv_cancel_page_response_timer();
   prv_invalidate_page_request();
   s_reader_loading = false;
 }
@@ -1709,7 +1738,7 @@ static void prv_handle_page(const char *payload) {
     return;
   }
   entry = prv_cache_store(book, chapter, verse, page, page_count, text);
-  should_apply = window_stack_get_top_window() == s_reader_window;
+  should_apply = window_stack_get_top_window() == s_reader_window && s_reader_loading;
   if (generation) {
     should_apply = should_apply && generation == s_page_request_generation;
   } else {
@@ -1717,6 +1746,7 @@ static void prv_handle_page(const char *payload) {
                    verse == s_current_verse;
   }
   if (should_apply) {
+    prv_cancel_page_response_timer();
     prv_apply_cached_page(entry);
   }
 }
@@ -1808,6 +1838,8 @@ static void prv_inbox_received(DictionaryIterator *iter, void *context) {
   } else if (strcmp(type, BIBBLE_MSG_NAVIGATE) == 0) {
     prv_handle_navigate(payload);
   } else if (strcmp(type, BIBBLE_MSG_ERROR) == 0) {
+    prv_cancel_page_response_timer();
+    s_reader_loading = false;
     prv_set_status(payload[0] ? payload : "Error");
     prv_set_reader_header_label(s_status);
   }
@@ -1816,6 +1848,8 @@ static void prv_inbox_received(DictionaryIterator *iter, void *context) {
 static void prv_inbox_dropped(AppMessageResult reason, void *context) {
   (void)reason;
   (void)context;
+  prv_cancel_page_response_timer();
+  s_reader_loading = false;
   prv_set_status("Phone message dropped");
   prv_set_reader_header_label(s_status);
 }
@@ -2040,6 +2074,7 @@ static void prv_deinit(void) {
     app_timer_cancel(s_outbox_retry_timer);
     s_outbox_retry_timer = NULL;
   }
+  prv_cancel_page_response_timer();
   if (s_reader_window) {
     window_destroy(s_reader_window);
     s_reader_window = NULL;

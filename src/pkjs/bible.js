@@ -4,6 +4,7 @@ var KJV_META = require("./bible-meta");
 
 var PAGE_CHAR_LIMIT = 360;
 var KJV_SOURCE_URL = "https://raw.githubusercontent.com/thiagobodruk/bible/master/json/en_kjv.json";
+var KJV_DOWNLOAD_TIMEOUT_MS = 30000;
 
 var MANUAL_ALIASES = {
   0: ["gen", "gn", "genesys"],
@@ -227,6 +228,15 @@ function failLoad(message) {
 
 function ensureLoaded(callback) {
   var request;
+  var settled = false;
+
+  function rejectLoad(message) {
+    if (settled) {
+      return;
+    }
+    settled = true;
+    failLoad(message);
+  }
 
   if (kjvBooks) {
     if (callback) {
@@ -253,8 +263,9 @@ function ensureLoaded(callback) {
   try {
     request = new XMLHttpRequest();
     request.open("GET", KJV_SOURCE_URL, true);
+    request.timeout = KJV_DOWNLOAD_TIMEOUT_MS;
   } catch (_) {
-    failLoad("KJV download failed");
+    rejectLoad("KJV download failed");
     return;
   }
 
@@ -264,6 +275,10 @@ function ensureLoaded(callback) {
     }
 
     if (request.status >= 200 && request.status < 300) {
+      if (settled) {
+        return;
+      }
+      settled = true;
       try {
         loadFromJsonText(request.responseText);
       } catch (error) {
@@ -272,12 +287,21 @@ function ensureLoaded(callback) {
       return;
     }
 
-    failLoad("KJV download failed");
+    rejectLoad("KJV download failed");
+  };
+  request.onerror = function() {
+    rejectLoad("KJV download failed");
+  };
+  request.ontimeout = function() {
+    rejectLoad("KJV download timed out");
+  };
+  request.onabort = function() {
+    rejectLoad("KJV download canceled");
   };
   try {
     request.send();
   } catch (_) {
-    failLoad("KJV download failed");
+    rejectLoad("KJV download failed");
   }
 }
 

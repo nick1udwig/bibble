@@ -35,8 +35,15 @@ function createPebbleMock(options) {
       assert.strictEqual(typeof listeners[type], "function", type + " listener should be registered");
       listeners[type](event || {});
     },
-    sendAppMessage: function(message, success) {
+    sendAppMessage: function(message, success, failure) {
       sent.push(message);
+      if (options.failSendCount > 0) {
+        options.failSendCount -= 1;
+        if (failure) {
+          failure("mock failure");
+        }
+        return;
+      }
       if (options.autoAck === false) {
         pending.push(success);
       } else if (success) {
@@ -54,6 +61,7 @@ function createPebbleMock(options) {
 function withPkjs(options, work) {
   var previousPebble = global.Pebble;
   var previousXmlHttpRequest = global.XMLHttpRequest;
+  var previousSetTimeout = global.setTimeout;
   var pebble;
 
   if (typeof options === "function") {
@@ -67,6 +75,12 @@ function withPkjs(options, work) {
     this.open = function() {};
     this.send = function() {};
   };
+  if (options.immediateTimers) {
+    global.setTimeout = function(callback) {
+      callback();
+      return null;
+    };
+  }
 
   try {
     freshPkjs(options.bible);
@@ -81,6 +95,11 @@ function withPkjs(options, work) {
       delete global.XMLHttpRequest;
     } else {
       global.XMLHttpRequest = previousXmlHttpRequest;
+    }
+    if (previousSetTimeout === undefined) {
+      delete global.setTimeout;
+    } else {
+      global.setTimeout = previousSetTimeout;
     }
     delete require.cache[require.resolve("../src/pkjs/index")];
     delete require.cache[require.resolve("../src/pkjs/bible")];
@@ -329,6 +348,65 @@ withPkjs({
 
   assert.deepStrictEqual(badPrefetchCalls, []);
   assert.deepStrictEqual(pebble.sent, []);
+});
+
+var retriedPageCalls = [];
+withPkjs({
+  bible: pageBibleFake(retriedPageCalls),
+  immediateTimers: true,
+  pebble: {
+    failSendCount: 1
+  }
+}, function(pebble) {
+  pebble.emit("appmessage", {
+    payload: {
+      MessageType: "page_request",
+      Payload: "42|3|16|0|31"
+    }
+  });
+
+  assert.strictEqual(pebble.sent.length, 2, "required page should retry once");
+  assert.deepStrictEqual(pebble.sent[0], pebble.sent[1]);
+});
+
+var exhaustedPageCalls = [];
+withPkjs({
+  bible: pageBibleFake(exhaustedPageCalls),
+  immediateTimers: true,
+  pebble: {
+    failSendCount: 3
+  }
+}, function(pebble) {
+  pebble.emit("appmessage", {
+    payload: {
+      MessageType: "page_request",
+      Payload: "42|3|16|0|32"
+    }
+  });
+
+  assert.strictEqual(pebble.sent.length, 4, "exhausted page should be followed by an error");
+  assert.deepStrictEqual(pebble.sent[3], {
+    0: "error",
+    1: "Page delivery failed"
+  });
+});
+
+var droppedPrefetchCalls = [];
+withPkjs({
+  bible: pageBibleFake(droppedPrefetchCalls),
+  immediateTimers: true,
+  pebble: {
+    failSendCount: 1
+  }
+}, function(pebble) {
+  pebble.emit("appmessage", {
+    payload: {
+      MessageType: "prefetch_request",
+      Payload: "42|3|2|1|33"
+    }
+  });
+
+  assert.strictEqual(pebble.sent.length, 1, "prefetch response should not retry");
 });
 
 var malformedPageCalls = [];

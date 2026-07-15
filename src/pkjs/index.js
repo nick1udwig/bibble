@@ -26,9 +26,12 @@ var ProtocolByteLimit = Object.freeze({
 });
 
 var SEND_QUEUE_MAX = 16;
+var SEND_RETRY_MAX = 2;
+var SEND_RETRY_DELAY_MS = 250;
 var sendQueue = [];
 var pendingBibleWork = [];
 var sending = false;
+var sendRetryTimer = null;
 var loadingBible = false;
 
 Pebble.addEventListener("ready", function() {
@@ -216,33 +219,77 @@ function sendEnvelope(type, payload) {
   var message = {};
   message[Key.messageType] = type || "";
   message[Key.payload] = payload || "";
-  enqueueMessage(message);
+  enqueueMessage(message, type || "");
   flushSendQueue();
 }
 
-function enqueueMessage(message) {
+function isRequiredMessage(type) {
+  return type === MessageType.page || type === MessageType.navigate || type === MessageType.error;
+}
+
+function enqueueMessage(message, type) {
+  var index;
+
   if (sendQueue.length >= SEND_QUEUE_MAX) {
-    sendQueue.shift();
+    if (!isRequiredMessage(type)) {
+      return false;
+    }
+    for (index = 0; index < sendQueue.length; index += 1) {
+      if (!isRequiredMessage(sendQueue[index].type)) {
+        sendQueue.splice(index, 1);
+        break;
+      }
+    }
+    if (sendQueue.length >= SEND_QUEUE_MAX) {
+      sendQueue.shift();
+    }
   }
-  sendQueue.push(message);
+  sendQueue.push({
+    attempts: 0,
+    message: message,
+    type: type
+  });
+  return true;
+}
+
+function scheduleSendRetry() {
+  if (sendRetryTimer !== null) {
+    return;
+  }
+  if (typeof setTimeout !== "function") {
+    flushSendQueue();
+    return;
+  }
+  sendRetryTimer = setTimeout(function() {
+    sendRetryTimer = null;
+    flushSendQueue();
+  }, SEND_RETRY_DELAY_MS);
 }
 
 function flushSendQueue() {
-  var message;
+  var entry;
 
-  if (sending || !sendQueue.length) {
+  if (sending || sendRetryTimer !== null || !sendQueue.length) {
     return;
   }
 
   sending = true;
-  message = sendQueue.shift();
-  Pebble.sendAppMessage(message, function() {
+  entry = sendQueue.shift();
+  Pebble.sendAppMessage(entry.message, function() {
     sending = false;
     flushSendQueue();
   }, function(error) {
     sending = false;
     log("sendAppMessage failed", error);
-    flushSendQueue();
+    if (isRequiredMessage(entry.type) && entry.attempts < SEND_RETRY_MAX) {
+      entry.attempts += 1;
+      sendQueue.unshift(entry);
+      scheduleSendRetry();
+    } else if (entry.type === MessageType.page || entry.type === MessageType.navigate) {
+      sendError("Page delivery failed");
+    } else {
+      flushSendQueue();
+    }
   });
 }
 
