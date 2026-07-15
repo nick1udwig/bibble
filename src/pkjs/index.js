@@ -58,6 +58,7 @@ function handlePageRequest(payload) {
   var chapter = parsePayloadInteger(fields[1]);
   var verse = parsePayloadInteger(fields[2]);
   var page = parsePayloadInteger(fields[3]);
+  var generation = parsePayloadInteger(fields[4]);
 
   if (
     !Bible.isValidChapter(bookIndex, chapter) ||
@@ -69,6 +70,10 @@ function handlePageRequest(payload) {
   }
   if (verse > 0 && !Bible.isValidVerse(bookIndex, chapter, verse)) {
     sendError("Bad verse");
+    return;
+  }
+  if (generation !== generation || generation < 1 || generation > 65535) {
+    sendError("Bad request");
     return;
   }
 
@@ -85,7 +90,7 @@ function handlePageRequest(payload) {
       result = Bible.getChapterPage(bookIndex, chapter, verse, page);
     }
 
-    sendPage(result);
+    sendPage(result, generation);
   });
 }
 
@@ -130,7 +135,7 @@ function handleDictationLookup(text) {
 
   if (parsed.chapter > 0) {
     withBibleReady(function() {
-      sendPage(Bible.getChapterPage(parsed.bookIndex, parsed.chapter, parsed.verse, 0));
+      sendPage(Bible.getChapterPage(parsed.bookIndex, parsed.chapter, parsed.verse, 0), 0);
     });
   }
 }
@@ -169,10 +174,11 @@ function startBibleDownload() {
   });
 }
 
-function sendPage(page) {
+function sendPage(page, generation) {
   sendEnvelope(
     MessageType.page,
     truncateUtf8([
+      generation || 0,
       page.bookIndex,
       page.chapter,
       page.verse,

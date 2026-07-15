@@ -223,7 +223,7 @@ withPkjs({
   });
   assert.deepStrictEqual(pebble.sent[1], {
     0: "page",
-    1: "42|3|16|2|5|16. For God so loved the world"
+    1: "0|42|3|16|2|5|16. For God so loved the world"
   });
 });
 
@@ -234,7 +234,7 @@ withPkjs({
   pebble.emit("appmessage", {
     payload: {
       0: "page_request",
-      1: "42|3|16|0"
+      1: "42|3|16|0|23"
     }
   });
 
@@ -243,7 +243,7 @@ withPkjs({
   ]);
   assert.deepStrictEqual(pebble.sent[0], {
     0: "page",
-    1: "42|3|16|2|5|John 3:16"
+    1: "23|42|3|16|2|5|John 3:16"
   });
 });
 
@@ -254,13 +254,13 @@ withPkjs({
   pebble.emit("appmessage", {
     payload: {
       MessageType: "page_request",
-      Payload: "42|3|0|-2"
+      Payload: "42|3|0|-2|24"
     }
   });
   pebble.emit("appmessage", {
     payload: {
       MessageType: "page_request",
-      Payload: "42|3|0|1002"
+      Payload: "42|3|0|1002|25"
     }
   });
 
@@ -270,11 +270,11 @@ withPkjs({
   ]);
   assert.deepStrictEqual(pebble.sent[0], {
     0: "page",
-    1: "42|3|1|2|5|previous"
+    1: "24|42|3|1|2|5|previous"
   });
   assert.deepStrictEqual(pebble.sent[1], {
     0: "page",
-    1: "42|3|1|2|5|next"
+    1: "25|42|3|1|2|5|next"
   });
 });
 
@@ -374,6 +374,29 @@ withPkjs({
   assert.deepStrictEqual(pebble.sent[0], {
     0: "error",
     1: "Bad verse"
+  });
+});
+
+var invalidGenerationCalls = [];
+withPkjs({
+  bible: pageBibleFake(invalidGenerationCalls)
+}, function(pebble) {
+  ["42|3|16|0", "42|3|16|0|0", "42|3|16|0|-1", "42|3|16|0|65536", "42|3|16|0|oops"].forEach(function(payload) {
+    pebble.emit("appmessage", {
+      payload: {
+        MessageType: "page_request",
+        Payload: payload
+      }
+    });
+  });
+
+  assert.deepStrictEqual(invalidGenerationCalls, []);
+  assert.strictEqual(pebble.sent.length, 5);
+  pebble.sent.forEach(function(message) {
+    assert.deepStrictEqual(message, {
+      0: "error",
+      1: "Bad request"
+    });
   });
 });
 

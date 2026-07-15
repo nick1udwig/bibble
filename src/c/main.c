@@ -94,6 +94,7 @@ static uint8_t s_pending_page_book;
 static uint8_t s_pending_page_chapter;
 static uint8_t s_pending_page_verse;
 static uint16_t s_pending_page;
+static uint16_t s_page_request_generation;
 static bool s_reader_loading;
 static bool s_select_hold_fired;
 static bool s_touch_subscribed;
@@ -400,6 +401,18 @@ static void prv_remove_queued_prefetch(void) {
     if (s_outbox_queue[index].prefetch) {
       prv_remove_outbox_message(index);
       s_prefetch_in_flight = false;
+    } else {
+      index += 1;
+    }
+  }
+}
+
+static void prv_remove_queued_page_requests(void) {
+  uint8_t index = s_outbox_busy ? 1 : 0;
+
+  while (index < s_outbox_count) {
+    if (strcmp(s_outbox_queue[index].type, BIBBLE_MSG_PAGE_REQUEST) == 0) {
+      prv_remove_outbox_message(index);
     } else {
       index += 1;
     }
@@ -730,14 +743,23 @@ static void prv_ready_timer_callback(void *context) {
   prv_send_message(BIBBLE_MSG_READY, "");
 }
 
+static void prv_invalidate_page_request(void) {
+  s_page_request_generation += 1;
+  if (!s_page_request_generation) {
+    s_page_request_generation = 1;
+  }
+}
+
 static void prv_request_page(uint8_t book, uint8_t chapter, uint8_t verse, uint16_t page) {
   char payload[48];
 
   s_prefetch_generation += 1;
   s_prefetch_in_flight = false;
   s_reader_loading = true;
+  prv_invalidate_page_request();
 
-  snprintf(payload, sizeof(payload), "%u|%u|%u|%u", book, chapter, verse, page);
+  snprintf(payload, sizeof(payload), "%u|%u|%u|%u|%u", book, chapter, verse, page,
+           s_page_request_generation);
   prv_send_message(BIBBLE_MSG_PAGE_REQUEST, payload);
 }
 
@@ -758,6 +780,16 @@ static void prv_schedule_page_request(uint8_t book, uint8_t chapter, uint8_t ver
   s_pending_page_verse = verse;
   s_pending_page = page;
   s_page_request_timer = app_timer_register(BIBBLE_PAGE_REQUEST_DELAY_MS, prv_page_request_timer_callback, NULL);
+}
+
+static void prv_cancel_page_request(void) {
+  if (s_page_request_timer) {
+    app_timer_cancel(s_page_request_timer);
+    s_page_request_timer = NULL;
+  }
+  prv_remove_queued_page_requests();
+  prv_invalidate_page_request();
+  s_reader_loading = false;
 }
 
 static void prv_request_next_page(void) {
@@ -1336,6 +1368,7 @@ static void prv_reader_window_unload(Window *window) {
   (void)window;
   s_prefetch_generation += 1;
   s_prefetch_in_flight = false;
+  prv_cancel_page_request();
   text_layer_destroy(s_reader_body_layer);
   scroll_layer_destroy(s_reader_scroll_layer);
   text_layer_destroy(s_reader_reference_layer);
@@ -1348,6 +1381,13 @@ static void prv_reader_window_unload(Window *window) {
   s_reader_header_layer = NULL;
 }
 
+static void prv_reader_window_disappear(Window *window) {
+  (void)window;
+  s_prefetch_generation += 1;
+  s_prefetch_in_flight = false;
+  prv_cancel_page_request();
+}
+
 static void prv_show_reader_window(uint8_t book, uint8_t chapter, uint8_t verse, bool request_page) {
   if (book >= BIBBLE_BOOK_COUNT || chapter < 1 || chapter > prv_chapter_count(book)) {
     return;
@@ -1358,6 +1398,7 @@ static void prv_show_reader_window(uint8_t book, uint8_t chapter, uint8_t verse,
 
   s_prefetch_generation += 1;
   s_prefetch_in_flight = false;
+  prv_invalidate_page_request();
 
   s_current_book = book;
   s_current_chapter = chapter;
@@ -1372,6 +1413,7 @@ static void prv_show_reader_window(uint8_t book, uint8_t chapter, uint8_t verse,
     s_reader_window = window_create();
     window_set_window_handlers(s_reader_window, (WindowHandlers){
       .load = prv_reader_window_load,
+      .disappear = prv_reader_window_disappear,
       .unload = prv_reader_window_unload,
     });
   }
@@ -1645,14 +1687,17 @@ static void prv_handle_page(const char *payload) {
   char buffer[BIBBLE_PAYLOAD_LENGTH];
   char *cursor = buffer;
   BibbleCachedPage *entry;
+  uint16_t generation;
   uint8_t book;
   uint8_t chapter;
   uint8_t verse;
   uint16_t page;
   uint16_t page_count;
   const char *text;
+  bool should_apply;
 
   prv_copy_string(buffer, sizeof(buffer), payload);
+  generation = (uint16_t)atoi(prv_next_field(&cursor));
   book = (uint8_t)atoi(prv_next_field(&cursor));
   chapter = (uint8_t)atoi(prv_next_field(&cursor));
   verse = (uint8_t)atoi(prv_next_field(&cursor));
@@ -1664,7 +1709,16 @@ static void prv_handle_page(const char *payload) {
     return;
   }
   entry = prv_cache_store(book, chapter, verse, page, page_count, text);
-  prv_apply_cached_page(entry);
+  should_apply = window_stack_get_top_window() == s_reader_window;
+  if (generation) {
+    should_apply = should_apply && generation == s_page_request_generation;
+  } else {
+    should_apply = should_apply && book == s_current_book && chapter == s_current_chapter &&
+                   verse == s_current_verse;
+  }
+  if (should_apply) {
+    prv_apply_cached_page(entry);
+  }
 }
 
 static void prv_handle_prefetch_page(const char *payload) {
