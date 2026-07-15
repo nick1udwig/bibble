@@ -1,7 +1,7 @@
 import fs from "fs";
 
 const sourcePath = process.argv[2] || "/tmp/bibble-kjv.json";
-const sourceUrl = "https://raw.githubusercontent.com/thiagobodruk/bible/master/json/en_kjv.json";
+const sourceUrl = "https://raw.githubusercontent.com/nick1udwig/bible/master/json/en_kjv.json";
 
 function readJson(path) {
   const text = fs.readFileSync(path, "utf8").replace(/^\uFEFF/, "");
