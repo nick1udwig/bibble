@@ -1045,11 +1045,12 @@ static void prv_grid_draw(BibbleGridKind kind, Layer *layer, GContext *ctx) {
   GFont font = fonts_get_system_font(FONT_KEY_GOTHIC_24_BOLD);
   uint16_t count = prv_grid_item_count(kind);
   uint16_t selected = prv_grid_selected_index(kind);
-  uint16_t index;
-#if defined(PBL_ROUND)
   ScrollLayer *scroll_layer = prv_grid_scroll_layer(kind);
   int visible_top = 0;
   int visible_bottom = bounds.size.h;
+  uint16_t first_index;
+  uint16_t last_index;
+  uint16_t index;
 
   if (scroll_layer) {
     GPoint offset = scroll_layer_get_content_offset(scroll_layer);
@@ -1057,30 +1058,37 @@ static void prv_grid_draw(BibbleGridKind kind, Layer *layer, GContext *ctx) {
     visible_top = -offset.y;
     visible_bottom = visible_top + scroll_bounds.size.h;
   }
-#endif
+
+  if (visible_top < 0) {
+    visible_top = 0;
+  }
+  if (visible_bottom > bounds.size.h) {
+    visible_bottom = bounds.size.h;
+  }
+  if (visible_bottom < visible_top) {
+    visible_bottom = visible_top;
+  }
+
+  first_index = (visible_top / BIBBLE_GRID_CELL_HEIGHT) * BIBBLE_GRID_COLUMNS;
+  last_index = ((visible_bottom + BIBBLE_GRID_CELL_HEIGHT - 1) / BIBBLE_GRID_CELL_HEIGHT) *
+               BIBBLE_GRID_COLUMNS;
+  if (last_index > count) {
+    last_index = count;
+  }
 
   graphics_context_set_fill_color(ctx, GColorWhite);
-  graphics_fill_rect(ctx, bounds, 0, GCornerNone);
+  graphics_fill_rect(ctx, GRect(0, visible_top, bounds.size.w, visible_bottom - visible_top), 0, GCornerNone);
 
-  for (index = 0; index < count; index += 1) {
+  for (index = first_index; index < last_index; index += 1) {
     char label[8];
     uint8_t col = index % BIBBLE_GRID_COLUMNS;
     uint16_t row = index / BIBBLE_GRID_COLUMNS;
     int16_t cell_top = row * BIBBLE_GRID_CELL_HEIGHT;
-#if defined(PBL_ROUND)
-    int16_t cell_bottom = cell_top + BIBBLE_GRID_CELL_HEIGHT;
-#endif
     int16_t x = (bounds.size.w * col) / BIBBLE_GRID_COLUMNS;
     int16_t next_x = (bounds.size.w * (col + 1)) / BIBBLE_GRID_COLUMNS;
     GRect cell = GRect(x, cell_top, next_x - x, BIBBLE_GRID_CELL_HEIGHT);
     GRect text_frame = GRect(cell.origin.x + 1, cell.origin.y + 2, cell.size.w - 2, cell.size.h - 4);
     bool is_selected = index == selected;
-
-#if defined(PBL_ROUND)
-    if (cell_top < visible_top || cell_bottom > visible_bottom) {
-      continue;
-    }
-#endif
 
     if (is_selected) {
       graphics_context_set_fill_color(ctx, GColorBlack);
