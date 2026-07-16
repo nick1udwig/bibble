@@ -22,7 +22,7 @@ assert.deepStrictEqual(Settings.normalizeSettings(null), { fontSize: "normal" })
 assert.deepStrictEqual(Settings.normalizeSettings({ fontSize: "large" }), { fontSize: "large" });
 assert.deepStrictEqual(Settings.normalizeSettings({ fontSize: "unexpected" }), { fontSize: "normal" });
 assert.strictEqual(Settings.pageCharLimit("normal"), 360);
-assert.strictEqual(Settings.pageCharLimit("large"), 150);
+assert.strictEqual(Settings.pageCharLimit("large"), 200);
 
 var storage = memoryStorage();
 assert.deepStrictEqual(Settings.loadSettings(storage), { fontSize: "normal" });

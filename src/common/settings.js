@@ -17,10 +17,10 @@
   var FONT_SIZE_NORMAL = "normal";
   var FONT_SIZE_LARGE = "large";
   var PAGE_CHAR_LIMIT_NORMAL = 360;
-  // Gothic 24 uses substantially fewer rows and columns than Gothic 14 on the
-  // 200x228 display. Keep a conservative budget so large-text pages fit without
+  // Gothic 18 Bold uses fewer rows and columns than Gothic 14 on the 200x228
+  // display. Keep a conservative budget so large-text pages fit without
   // excessive scrolling; the profile-keyed cache avoids repaginating on every read.
-  var PAGE_CHAR_LIMIT_LARGE = 150;
+  var PAGE_CHAR_LIMIT_LARGE = 200;
 
   function normalizeFontSize(value) {
     return value === FONT_SIZE_LARGE || value === 18 || value === "18" ||
