@@ -5,7 +5,7 @@ var Bible = require("../src/pkjs/bible");
 var BibbleSettings = require("../src/common/settings");
 var testBooks = require("./helpers").testBooks;
 
-var PAGE_CHAR_LIMIT = 360;
+var PAGE_CHAR_LIMIT = 200;
 
 Bible.loadFromBooks(testBooks({
   verseText: function(_book, bookIndex, chapter, verse) {
@@ -17,12 +17,12 @@ Bible.loadFromBooks(testBooks({
 }));
 
 var firstPage = Bible.getChapterPage(0, 1, 1, 1);
-var normalPageCount = firstPage.pageCount;
+var defaultPageCount = firstPage.pageCount;
 var profiles = [
+  { fontSize: "18", bold: true },
   { fontSize: "14", bold: false },
   { fontSize: "14", bold: true },
   { fontSize: "18", bold: false },
-  { fontSize: "18", bold: true },
   { fontSize: "24", bold: false },
   { fontSize: "24", bold: true }
 ];
@@ -38,9 +38,9 @@ for (pageNumber = 1; pageNumber <= firstPage.pageCount; pageNumber += 1) {
   );
 }
 
-assert.strictEqual(Bible.fontSize(), BibbleSettings.FONT_SIZE_14);
-assert.strictEqual(Bible.fontBold(), false);
-assert.strictEqual(Bible.fontProfile(), "14r");
+assert.strictEqual(Bible.fontSize(), BibbleSettings.FONT_SIZE_18);
+assert.strictEqual(Bible.fontBold(), true);
+assert.strictEqual(Bible.fontProfile(), "18b");
 assert.strictEqual(Bible.cacheInfo().chapters, 1);
 
 for (profileIndex = 1; profileIndex < profiles.length; profileIndex += 1) {
@@ -60,12 +60,12 @@ for (profileIndex = 1; profileIndex < profiles.length; profileIndex += 1) {
   }
 }
 
-assert(firstPage.pageCount > normalPageCount, "24 Bold should split the chapter into more pages");
+assert(firstPage.pageCount > defaultPageCount, "24 Bold should split the chapter into more pages");
 assert.strictEqual(Bible.setSettings(profiles[0]), true);
 assert.strictEqual(
   Bible.getChapterPage(0, 1, 1, 1).pageCount,
-  normalPageCount,
-  "switching back should reuse the 14 Regular pagination profile"
+  defaultPageCount,
+  "switching back should reuse the default 18 Bold pagination profile"
 );
 assert.strictEqual(Bible.cacheInfo().chapters, 6, "switching back should reuse the cached profile");
 

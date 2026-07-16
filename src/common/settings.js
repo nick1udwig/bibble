@@ -17,6 +17,8 @@
   var FONT_SIZE_14 = "14";
   var FONT_SIZE_18 = "18";
   var FONT_SIZE_24 = "24";
+  var DEFAULT_FONT_SIZE = FONT_SIZE_18;
+  var DEFAULT_BOLD = true;
   // Bold faces are slightly wider, so each of the six profiles gets its own
   // conservative page budget. Profile-keyed caching makes subsequent switches cheap.
   var PAGE_CHAR_LIMITS = {
@@ -35,12 +37,21 @@
     if (value === FONT_SIZE_18 || value === 18 || value === "large") {
       return FONT_SIZE_18;
     }
-    return FONT_SIZE_14;
+    if (value === FONT_SIZE_14 || value === 14 || value === "normal") {
+      return FONT_SIZE_14;
+    }
+    return DEFAULT_FONT_SIZE;
   }
 
   function normalizeBold(value, legacyFontSize) {
     if (value === undefined || value === null) {
-      return legacyFontSize === "large";
+      if (legacyFontSize === "normal") {
+        return false;
+      }
+      if (legacyFontSize === "large") {
+        return true;
+      }
+      return DEFAULT_BOLD;
     }
     return value === true || value === 1 || value === "1" || value === "true" ||
       value === "bold" || value === "yes";
@@ -189,6 +200,8 @@
     FONT_SIZE_14: FONT_SIZE_14,
     FONT_SIZE_18: FONT_SIZE_18,
     FONT_SIZE_24: FONT_SIZE_24,
+    DEFAULT_FONT_SIZE: DEFAULT_FONT_SIZE,
+    DEFAULT_BOLD: DEFAULT_BOLD,
     PAGE_CHAR_LIMITS: PAGE_CHAR_LIMITS,
     normalizeFontSize: normalizeFontSize,
     normalizeBold: normalizeBold,

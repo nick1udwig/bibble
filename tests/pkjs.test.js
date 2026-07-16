@@ -242,7 +242,7 @@ withPkjs({
     response: encodeURIComponent(JSON.stringify({ fontSize: "24", bold: true }))
   });
   assert.deepStrictEqual(settingsCalls, [
-    { fontSize: "14", bold: false },
+    { fontSize: "18", bold: true },
     { fontSize: "24", bold: true }
   ]);
   assert.deepStrictEqual(pebble.sent[0], {
@@ -280,7 +280,7 @@ withPkjs(function(pebble) {
   });
   assert.deepStrictEqual(pebble.sent[1], {
     0: "settings",
-    1: "14r"
+    1: "18b"
   });
 });
 
@@ -319,7 +319,7 @@ withPkjs({
   });
   assert.deepStrictEqual(pebble.sent[1], {
     0: "page",
-    1: "0|14r|42|3|16|2|5|16. For God so loved the world"
+    1: "0|18b|42|3|16|2|5|16. For God so loved the world"
   });
 });
 
@@ -339,7 +339,7 @@ withPkjs({
   ]);
   assert.deepStrictEqual(pebble.sent[0], {
     0: "page",
-    1: "23|14r|42|3|16|2|5|John 3:16"
+    1: "23|18b|42|3|16|2|5|John 3:16"
   });
 });
 
@@ -366,11 +366,11 @@ withPkjs({
   ]);
   assert.deepStrictEqual(pebble.sent[0], {
     0: "page",
-    1: "24|14r|42|3|1|2|5|previous"
+    1: "24|18b|42|3|1|2|5|previous"
   });
   assert.deepStrictEqual(pebble.sent[1], {
     0: "page",
-    1: "25|14r|42|3|1|2|5|next"
+    1: "25|18b|42|3|1|2|5|next"
   });
 });
 
@@ -397,11 +397,11 @@ withPkjs({
   ]);
   assert.deepStrictEqual(pebble.sent[0], {
     0: "prefetch_page",
-    1: "17|14r|42|3|1|2|5|previous"
+    1: "17|18b|42|3|1|2|5|previous"
   });
   assert.deepStrictEqual(pebble.sent[1], {
     0: "prefetch_page",
-    1: "17|14r|42|3|1|2|5|next"
+    1: "17|18b|42|3|1|2|5|next"
   });
 });
 

@@ -114,8 +114,8 @@ static uint8_t s_pending_page_verse;
 static uint16_t s_pending_page;
 static uint16_t s_page_request_generation;
 static bool s_reader_loading;
-static uint8_t s_font_size = 14;
-static bool s_bold_text;
+static uint8_t s_font_size = 18;
+static bool s_bold_text = true;
 static bool s_select_hold_fired;
 static bool s_touch_subscribed;
 static bool s_touch_down;
@@ -2349,7 +2349,8 @@ static void prv_touch_handler(const TouchEvent *event, void *context) {
 }
 
 static void prv_init(void) {
-  bool legacy_large_text = persist_exists(BIBBLE_PERSIST_LEGACY_LARGE_TEXT) &&
+  bool has_legacy_text_size = persist_exists(BIBBLE_PERSIST_LEGACY_LARGE_TEXT);
+  bool legacy_large_text = has_legacy_text_size &&
                            persist_read_bool(BIBBLE_PERSIST_LEGACY_LARGE_TEXT);
   int32_t persisted_font_size = persist_exists(BIBBLE_PERSIST_FONT_SIZE)
     ? persist_read_int(BIBBLE_PERSIST_FONT_SIZE)
@@ -2357,10 +2358,10 @@ static void prv_init(void) {
 
   s_font_size = prv_valid_font_size((uint8_t)persisted_font_size)
     ? (uint8_t)persisted_font_size
-    : (legacy_large_text ? 18 : 14);
+    : (has_legacy_text_size ? (legacy_large_text ? 18 : 14) : 18);
   s_bold_text = persist_exists(BIBBLE_PERSIST_FONT_BOLD)
     ? persist_read_bool(BIBBLE_PERSIST_FONT_BOLD)
-    : legacy_large_text;
+    : (has_legacy_text_size ? legacy_large_text : true);
   app_message_register_inbox_received(prv_inbox_received);
   app_message_register_inbox_dropped(prv_inbox_dropped);
   app_message_register_outbox_sent(prv_outbox_sent);
