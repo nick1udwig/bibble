@@ -2,8 +2,10 @@
 
 var assert = require("assert");
 var helpers = require("./helpers");
+var KJV_SOURCE = require("../src/common/kjv-source");
 var freshBible = helpers.freshBible;
 var testBooks = helpers.testBooks;
+var storagePrefix = "bibble." + KJV_SOURCE.storageVersion;
 
 var unloadedBible = freshBible();
 assert.strictEqual(unloadedBible.isLoaded(), false, "KJV text should not be bundled at initial load");
@@ -147,8 +149,8 @@ withLocalStorage(memoryStorage(), function() {
   var page;
 
   Bible.loadFromBooks(testBooks());
-  assert.strictEqual(storage.values["bibble.kjv-books-v1.complete"], "kjv-books-v1");
-  assert(storage.values["bibble.kjv-books-v1.book.42"], "John should be persisted separately");
+  assert.strictEqual(storage.values[storagePrefix + ".complete"], KJV_SOURCE.storageVersion);
+  assert(storage.values[storagePrefix + ".book.42"], "John should be persisted separately");
 
   withXmlHttpRequest(function UnexpectedRequest() {
     requestCount += 1;
@@ -166,8 +168,8 @@ withLocalStorage(memoryStorage(), function() {
   assert.strictEqual(RestoredBible.isLoaded(), true);
   page = RestoredBible.getChapterPage(42, 3, 16, 0);
   assert(page.text.indexOf("16. John 3:16") !== -1);
-  assert(storage.reads.indexOf("bibble.kjv-books-v1.book.42") !== -1, "requested book should hydrate");
-  assert.strictEqual(storage.reads.indexOf("bibble.kjv-books-v1.book.0"), -1, "unrequested books should stay cold");
+  assert(storage.reads.indexOf(storagePrefix + ".book.42") !== -1, "requested book should hydrate");
+  assert.strictEqual(storage.reads.indexOf(storagePrefix + ".book.0"), -1, "unrequested books should stay cold");
 
   [0, 1, 2, 3, 4, 5].forEach(function(bookIndex) {
     RestoredBible.getChapterPage(bookIndex, 1, 1, 0);
@@ -198,7 +200,11 @@ withLocalStorage((function() {
 });
 
 withXmlHttpRequest(function SuccessfulRequest() {
-  this.open = function() {};
+  this.open = function(method, url, async) {
+    assert.strictEqual(method, "GET");
+    assert.strictEqual(url, KJV_SOURCE.url);
+    assert.strictEqual(async, true);
+  };
   this.send = function() {
     this.readyState = 4;
     this.status = 200;

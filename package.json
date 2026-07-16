@@ -12,7 +12,7 @@
   ],
   "private": true,
   "scripts": {
-    "fetch:kjv": "curl -sL -o /tmp/bibble-kjv.json https://raw.githubusercontent.com/thiagobodruk/bible/master/json/en_kjv.json",
+    "fetch:kjv": "node scripts/fetch-kjv.mjs",
     "generate:data": "node scripts/generate-kjv-data.mjs /tmp/bibble-kjv.json",
     "test": "node tests/run.js",
     "build:watch": "pebble build",

@@ -1,13 +1,13 @@
 "use strict";
 
 var KJV_META = require("./bible-meta");
+var KJV_SOURCE = require("../common/kjv-source");
 
 var PAGE_CHAR_LIMIT = 360;
 var CHAPTER_PAGE_CACHE_LIMIT = 12;
 var TEXT_BOOK_CACHE_LIMIT = 4;
-var KJV_SOURCE_URL = "https://raw.githubusercontent.com/thiagobodruk/bible/master/json/en_kjv.json";
 var KJV_DOWNLOAD_TIMEOUT_MS = 30000;
-var KJV_STORAGE_VERSION = "kjv-books-v1";
+var KJV_STORAGE_VERSION = KJV_SOURCE.storageVersion;
 var KJV_STORAGE_MARKER_KEY = "bibble." + KJV_STORAGE_VERSION + ".complete";
 var KJV_STORAGE_BOOK_KEY_PREFIX = "bibble." + KJV_STORAGE_VERSION + ".book.";
 
@@ -479,7 +479,7 @@ function ensureLoaded(callback) {
 
   try {
     request = new XMLHttpRequest();
-    request.open("GET", KJV_SOURCE_URL, true);
+    request.open("GET", KJV_SOURCE.url, true);
     request.timeout = KJV_DOWNLOAD_TIMEOUT_MS;
   } catch (_) {
     rejectLoad("KJV download failed");

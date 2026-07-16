@@ -15,7 +15,7 @@ npm test
 npm run build:watch
 ```
 
-The generated Bible file in the PBW contains metadata only. The KJV text comes from the configured `en_kjv.json` source and is cached persistently by PKJS after the first successful download.
+The generated Bible file in the PBW contains metadata only. The KJV text comes from [`nick1udwig/bible` on `master`](https://github.com/nick1udwig/bible/tree/master) and is cached persistently by PKJS after the first successful download. Runtime downloads, data-generation provenance, fetch tooling, and cache versioning all use `src/common/kjv-source.js` as their source definition.
 
 ## Deploy
 
