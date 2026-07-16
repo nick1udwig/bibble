@@ -13,9 +13,7 @@
 #define BIBBLE_DICTATION_LENGTH 128
 #define BIBBLE_REF_LENGTH 80
 #define BIBBLE_GRID_COLUMNS 3
-#define BIBBLE_GRID_CELL_HEIGHT_14 24
-#define BIBBLE_GRID_CELL_HEIGHT_18 30
-#define BIBBLE_GRID_CELL_HEIGHT_24 38
+#define BIBBLE_GRID_CELL_HEIGHT 38
 #define BIBBLE_ROUND_GRID_SIDE_INSET 30
 #define BIBBLE_ROUND_GRID_BOTTOM_GAP 4
 #define BIBBLE_TOUCH_TAP_MAX_PX 15
@@ -194,13 +192,7 @@ static void prv_select_raw_down_handler(ClickRecognizerRef recognizer, void *con
 static void prv_select_raw_up_handler(ClickRecognizerRef recognizer, void *context);
 
 static int16_t prv_grid_cell_height(void) {
-  if (s_font_size == 24) {
-    return BIBBLE_GRID_CELL_HEIGHT_24;
-  }
-  if (s_font_size == 18) {
-    return BIBBLE_GRID_CELL_HEIGHT_18;
-  }
-  return BIBBLE_GRID_CELL_HEIGHT_14;
+  return BIBBLE_GRID_CELL_HEIGHT;
 }
 
 static int16_t prv_header_height(void) {
@@ -274,7 +266,7 @@ static GFont prv_reader_font(void) {
 }
 
 static GFont prv_grid_font(void) {
-  return prv_selected_font();
+  return fonts_get_system_font(FONT_KEY_GOTHIC_24_BOLD);
 }
 
 static void prv_copy_string(char *dest, size_t dest_size, const char *src) {
