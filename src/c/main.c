@@ -1478,6 +1478,31 @@ static void prv_update_reader_layers(bool reset_scroll) {
   prv_restore_reader_header();
 }
 
+static bool prv_replace_reader_body_layer(GSize size) {
+  TextLayer *old_layer = s_reader_body_layer;
+  TextLayer *new_layer;
+
+  if (!s_reader_scroll_layer) {
+    return false;
+  }
+
+  new_layer = text_layer_create(GRect(0, 0, size.w, size.h));
+  if (!new_layer) {
+    return false;
+  }
+
+  text_layer_set_font(new_layer, prv_reader_font());
+  text_layer_set_overflow_mode(new_layer, GTextOverflowModeWordWrap);
+  text_layer_set_background_color(new_layer, GColorClear);
+  scroll_layer_add_child(s_reader_scroll_layer, text_layer_get_layer(new_layer));
+  s_reader_body_layer = new_layer;
+
+  if (old_layer) {
+    text_layer_destroy(old_layer);
+  }
+  return true;
+}
+
 static void prv_reader_window_load(Window *window) {
   Layer *root = window_get_root_layer(window);
   GRect bounds = layer_get_bounds(root);
@@ -1495,11 +1520,7 @@ static void prv_reader_window_load(Window *window) {
   scroll_layer_set_click_config_onto_window(s_reader_scroll_layer, window);
   layer_add_child(root, scroll_layer_get_layer(s_reader_scroll_layer));
 
-  s_reader_body_layer = text_layer_create(GRect(0, 0, body_frame.size.w, body_frame.size.h));
-  text_layer_set_font(s_reader_body_layer, prv_reader_font());
-  text_layer_set_overflow_mode(s_reader_body_layer, GTextOverflowModeWordWrap);
-  text_layer_set_background_color(s_reader_body_layer, GColorClear);
-  scroll_layer_add_child(s_reader_scroll_layer, text_layer_get_layer(s_reader_body_layer));
+  prv_replace_reader_body_layer(body_frame.size);
 
   prv_update_reader_layers(true);
 }
@@ -1541,7 +1562,7 @@ static void prv_relayout_for_font_size(void) {
   bounds = layer_get_bounds(window_get_root_layer(s_reader_window));
   body_frame = prv_reader_body_frame_for_bounds(bounds);
   layer_set_frame(scroll_layer_get_layer(s_reader_scroll_layer), body_frame);
-  text_layer_set_font(s_reader_body_layer, prv_reader_font());
+  prv_replace_reader_body_layer(body_frame.size);
   prv_update_reader_layers(true);
 }
 
