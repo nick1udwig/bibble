@@ -2,6 +2,7 @@
 
 var assert = require("assert");
 var Bible = require("../src/pkjs/bible");
+var BibbleSettings = require("../src/common/settings");
 var testBooks = require("./helpers").testBooks;
 
 var PAGE_CHAR_LIMIT = 360;
@@ -16,6 +17,7 @@ Bible.loadFromBooks(testBooks({
 }));
 
 var firstPage = Bible.getChapterPage(0, 1, 1, 1);
+var normalPageCount = firstPage.pageCount;
 var pageNumber;
 var page;
 
@@ -26,6 +28,27 @@ for (pageNumber = 1; pageNumber <= firstPage.pageCount; pageNumber += 1) {
     "page " + String(pageNumber) + " should fit within the watch payload limit"
   );
 }
+
+assert.strictEqual(Bible.fontSize(), BibbleSettings.FONT_SIZE_NORMAL);
+assert.strictEqual(Bible.cacheInfo().chapters, 1);
+assert.strictEqual(Bible.setFontSize(BibbleSettings.FONT_SIZE_LARGE), true);
+firstPage = Bible.getChapterPage(0, 1, 1, 1);
+assert(firstPage.pageCount > normalPageCount, "large text should split the chapter into more pages");
+assert.strictEqual(Bible.cacheInfo().chapters, 2, "each font profile should keep its own cached pages");
+for (pageNumber = 1; pageNumber <= firstPage.pageCount; pageNumber += 1) {
+  page = Bible.getChapterPage(0, 1, 0, pageNumber);
+  assert(
+    page.text.length <= BibbleSettings.PAGE_CHAR_LIMIT_LARGE,
+    "large-text page " + String(pageNumber) + " should use the smaller page budget"
+  );
+}
+assert.strictEqual(Bible.setFontSize(BibbleSettings.FONT_SIZE_NORMAL), true);
+assert.strictEqual(
+  Bible.getChapterPage(0, 1, 1, 1).pageCount,
+  normalPageCount,
+  "switching back should reuse the normal pagination profile"
+);
+assert.strictEqual(Bible.cacheInfo().chapters, 2, "switching back should reuse the cached profile");
 
 page = Bible.getChapterPage(42, 3, 16, 0);
 assert.strictEqual(page.bookName, "John");

@@ -1,6 +1,7 @@
 "use strict";
 
 var Bible = require("./bible");
+var BibbleSettings = require("../common/settings");
 
 var Key = Object.freeze({
   messageType: 0,
@@ -15,6 +16,7 @@ var MessageType = Object.freeze({
   status: "status",
   page: "page",
   prefetchPage: "prefetch_page",
+  settings: "settings",
   navigate: "navigate",
   error: "error"
 });
@@ -33,6 +35,11 @@ var pendingBibleWork = [];
 var sending = false;
 var sendRetryTimer = null;
 var loadingBible = false;
+var currentSettings = BibbleSettings.loadSettings();
+
+if (typeof Bible.setFontSize === "function") {
+  Bible.setFontSize(currentSettings.fontSize);
+}
 
 Pebble.addEventListener("ready", function() {
   sendStatus("Select a book");
@@ -45,6 +52,7 @@ Pebble.addEventListener("appmessage", function(event) {
 
   if (type === MessageType.ready) {
     sendStatus("Select a book");
+    sendSettings();
     ensureBibleReady();
   } else if (type === MessageType.pageRequest) {
     handlePageRequest(payload);
@@ -53,6 +61,27 @@ Pebble.addEventListener("appmessage", function(event) {
   } else if (type === MessageType.dictationLookup) {
     handleDictationLookup(payload);
   }
+});
+
+Pebble.addEventListener("showConfiguration", function() {
+  Pebble.openURL(BibbleSettings.buildConfigPageUrl(
+    BibbleSettings.CONFIG_PAGE_URL,
+    currentSettings,
+    Date.now()
+  ));
+});
+
+Pebble.addEventListener("webviewclosed", function(event) {
+  var response = BibbleSettings.parseConfigPageResponse(event ? event.response : null);
+
+  if (!response) {
+    return;
+  }
+  currentSettings = BibbleSettings.saveSettings(response);
+  if (typeof Bible.setFontSize === "function") {
+    Bible.setFontSize(currentSettings.fontSize);
+  }
+  sendSettings();
 });
 
 function handlePageRequest(payload) {
@@ -182,6 +211,7 @@ function sendPage(page, generation) {
     MessageType.page,
     truncateUtf8([
       generation || 0,
+      currentSettings.fontSize,
       page.bookIndex,
       page.chapter,
       page.verse,
@@ -197,6 +227,7 @@ function sendPrefetchPage(page, generation) {
     MessageType.prefetchPage,
     truncateUtf8([
       generation,
+      currentSettings.fontSize,
       page.bookIndex,
       page.chapter,
       page.verse,
@@ -209,6 +240,10 @@ function sendPrefetchPage(page, generation) {
 
 function sendStatus(status) {
   sendEnvelope(MessageType.status, sanitizeField(status || "", ProtocolByteLimit.status));
+}
+
+function sendSettings() {
+  sendEnvelope(MessageType.settings, currentSettings.fontSize);
 }
 
 function sendError(message) {
@@ -224,7 +259,8 @@ function sendEnvelope(type, payload) {
 }
 
 function isRequiredMessage(type) {
-  return type === MessageType.page || type === MessageType.navigate || type === MessageType.error;
+  return type === MessageType.page || type === MessageType.settings ||
+    type === MessageType.navigate || type === MessageType.error;
 }
 
 function enqueueMessage(message, type) {

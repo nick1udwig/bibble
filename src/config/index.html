@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#171717" />
+    <title>Bibble Settings</title>
+    <link rel="stylesheet" href="./style.css" />
+  </head>
+  <body>
+    <main class="page">
+      <header class="hero">
+        <div class="mark" aria-hidden="true">†</div>
+        <div>
+          <p class="eyebrow">Bibble</p>
+          <h1>Settings</h1>
+          <p class="lede">Choose how large scripture, selection labels, and headers appear on your watch.</p>
+        </div>
+      </header>
+
+      <form id="settings-form" class="card">
+        <fieldset>
+          <legend>Text size</legend>
+
+          <label class="choice">
+            <input type="radio" name="font-size" value="normal" checked />
+            <span>
+              <strong>Current</strong>
+              <small>Gothic 14 for scripture and headers</small>
+            </span>
+          </label>
+
+          <label class="choice">
+            <input type="radio" name="font-size" value="large" />
+            <span>
+              <strong>One size larger</strong>
+              <small>Gothic 18 for easier reading</small>
+            </span>
+          </label>
+        </fieldset>
+
+        <section class="preview-section" aria-labelledby="preview-title">
+          <h2 id="preview-title">Preview</h2>
+          <div id="watch-preview" class="watch-preview" data-font-size="normal">
+            <div class="preview-header">
+              <span>John 3</span>
+              <span>10:09</span>
+            </div>
+            <p><b>16.</b> For God so loved the world, that he gave his only begotten Son.</p>
+          </div>
+        </section>
+
+        <button class="primary" type="submit">Save &amp; close</button>
+        <p id="status" class="status" role="status">Ready to save.</p>
+      </form>
+    </main>
+
+    <script src="./settings.js"></script>
+    <script src="./app.js"></script>
+  </body>
+</html>

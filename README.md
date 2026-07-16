@@ -2,6 +2,10 @@
 
 KJV Bible reader for Repebble core devices.
 
+The companion settings page at <https://nick1udwig.github.io/bibble/config/> switches the reader,
+selection labels, and headers between the current font size and the next system size up. Chapters
+are paginated lazily for the selected size; changing it never rebuilds or redownloads the KJV corpus.
+
 The native watch app is C. On first use, PKJS downloads and normalizes the KJV text into persistent phone-side storage. Later launches restore the corpus marker without downloading or parsing the whole Bible, and books are hydrated only when requested. PKJS owns reference parsing and chapter paging. The watch keeps an eight-entry LRU page cache and prefetches an asymmetric reading window (four pages forward and two backward) over AppMessage.
 
 Publishing metadata and app icon assets are in [`docs/publishing.md`](docs/publishing.md).
@@ -11,6 +15,7 @@ Publishing metadata and app icon assets are in [`docs/publishing.md`](docs/publi
 ```sh
 npm run fetch:kjv
 npm run generate:data
+npm run build:config:docs
 npm test
 npm run build:watch
 ```

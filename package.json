@@ -14,6 +14,7 @@
   "scripts": {
     "fetch:kjv": "node scripts/fetch-kjv.mjs",
     "generate:data": "node scripts/generate-kjv-data.mjs /tmp/bibble-kjv.json",
+    "build:config:docs": "node scripts/build-config-docs.mjs",
     "test": "node tests/run.js",
     "build:watch": "pebble build",
     "build:watch:release": "npm run build:watch && bash scripts/prepare-release-pbw.sh",
@@ -34,6 +35,9 @@
     "watchapp": {
       "watchface": false
     },
+    "capabilities": [
+      "configurable"
+    ],
     "messageKeys": {
       "MessageType": 0,
       "Payload": 1

@@ -16,9 +16,13 @@ Generated icon sizes:
 ## Build
 
 ```bash
+npm run build:config:docs
 npm test
 npm run build:watch:release
 ```
+
+Configure GitHub Pages to deploy from the `master` branch's `/docs` directory. Then verify the
+configuration page at <https://nick1udwig.github.io/bibble/config/> after publishing.
 
 The release build minifies the packaged companion JavaScript and omits its source map from the PBW. The matching map remains available at `build/release/pebble-js-app.js.map` for debugging.
 

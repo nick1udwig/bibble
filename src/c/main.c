@@ -13,19 +13,23 @@
 #define BIBBLE_DICTATION_LENGTH 128
 #define BIBBLE_REF_LENGTH 80
 #define BIBBLE_GRID_COLUMNS 3
-#define BIBBLE_GRID_CELL_HEIGHT 34
+#define BIBBLE_GRID_CELL_HEIGHT_NORMAL 34
+#define BIBBLE_GRID_CELL_HEIGHT_LARGE 38
 #define BIBBLE_ROUND_GRID_SIDE_INSET 30
 #define BIBBLE_ROUND_GRID_BOTTOM_GAP 4
 #define BIBBLE_TOUCH_TAP_MAX_PX 15
 #define BIBBLE_TOUCH_SWIPE_MIN_PX 40
-#define BIBBLE_HEADER_HEIGHT 18
-#define BIBBLE_HEADER_TIME_WIDTH 42
+#define BIBBLE_HEADER_HEIGHT_NORMAL 18
+#define BIBBLE_HEADER_HEIGHT_LARGE 22
+#define BIBBLE_HEADER_TIME_WIDTH_NORMAL 42
+#define BIBBLE_HEADER_TIME_WIDTH_LARGE 52
 #define BIBBLE_READER_TEXT_PADDING 4
 #define BIBBLE_READER_TEXT_MEASURE_HEIGHT 24000
 #define BIBBLE_ROUND_READER_SIDE_INSET 30
 #define BIBBLE_ROUND_READER_TOP_INSET 30
 #define BIBBLE_ROUND_READER_BOTTOM_GAP 10
-#define BIBBLE_ROUND_HEADER_HEIGHT 24
+#define BIBBLE_ROUND_HEADER_HEIGHT_NORMAL 24
+#define BIBBLE_ROUND_HEADER_HEIGHT_LARGE 28
 #define BIBBLE_ROUND_HEADER_SIDE_INSET 76
 #define BIBBLE_PAGE_CACHE_SIZE 8
 #define BIBBLE_PREFETCH_STEP_COUNT 6
@@ -36,6 +40,7 @@
 #define BIBBLE_READY_DELAY_MS 300
 #define BIBBLE_PAGE_REQUEST_DELAY_MS 120
 #define BIBBLE_SELECT_HOLD_MS 700
+#define BIBBLE_PERSIST_FONT_SIZE 1
 
 #define BIBBLE_MSG_READY "ready"
 #define BIBBLE_MSG_PAGE_REQUEST "page_request"
@@ -44,6 +49,7 @@
 #define BIBBLE_MSG_STATUS "status"
 #define BIBBLE_MSG_PAGE "page"
 #define BIBBLE_MSG_PREFETCH_PAGE "prefetch_page"
+#define BIBBLE_MSG_SETTINGS "settings"
 #define BIBBLE_MSG_NAVIGATE "navigate"
 #define BIBBLE_MSG_ERROR "error"
 
@@ -102,6 +108,7 @@ static uint8_t s_pending_page_verse;
 static uint16_t s_pending_page;
 static uint16_t s_page_request_generation;
 static bool s_reader_loading;
+static bool s_large_text;
 static bool s_select_hold_fired;
 static bool s_touch_subscribed;
 static bool s_touch_down;
@@ -177,6 +184,38 @@ static void prv_minute_tick_handler(struct tm *tick_time, TimeUnits units_change
 static void prv_select_raw_down_handler(ClickRecognizerRef recognizer, void *context);
 static void prv_select_raw_up_handler(ClickRecognizerRef recognizer, void *context);
 
+static int16_t prv_grid_cell_height(void) {
+  return s_large_text ? BIBBLE_GRID_CELL_HEIGHT_LARGE : BIBBLE_GRID_CELL_HEIGHT_NORMAL;
+}
+
+static int16_t prv_header_height(void) {
+#if defined(PBL_ROUND)
+  return s_large_text ? BIBBLE_ROUND_HEADER_HEIGHT_LARGE : BIBBLE_ROUND_HEADER_HEIGHT_NORMAL;
+#else
+  return s_large_text ? BIBBLE_HEADER_HEIGHT_LARGE : BIBBLE_HEADER_HEIGHT_NORMAL;
+#endif
+}
+
+static int16_t prv_header_text_height(void) {
+  return s_large_text ? BIBBLE_HEADER_HEIGHT_LARGE : BIBBLE_HEADER_HEIGHT_NORMAL;
+}
+
+static int16_t prv_header_time_width(void) {
+  return s_large_text ? BIBBLE_HEADER_TIME_WIDTH_LARGE : BIBBLE_HEADER_TIME_WIDTH_NORMAL;
+}
+
+static GFont prv_header_font(void) {
+  return fonts_get_system_font(s_large_text ? FONT_KEY_GOTHIC_18 : FONT_KEY_GOTHIC_14);
+}
+
+static GFont prv_reader_font(void) {
+  return fonts_get_system_font(s_large_text ? FONT_KEY_GOTHIC_18 : FONT_KEY_GOTHIC_14);
+}
+
+static GFont prv_grid_font(void) {
+  return fonts_get_system_font(s_large_text ? FONT_KEY_GOTHIC_28_BOLD : FONT_KEY_GOTHIC_24_BOLD);
+}
+
 static void prv_copy_string(char *dest, size_t dest_size, const char *src) {
   if (!dest || dest_size == 0) {
     return;
@@ -190,7 +229,8 @@ static GRect prv_grid_frame_for_bounds(GRect bounds) {
                bounds.size.w - (BIBBLE_ROUND_GRID_SIDE_INSET * 2),
                bounds.size.h - BIBBLE_ROUND_READER_TOP_INSET - BIBBLE_ROUND_GRID_BOTTOM_GAP);
 #else
-  return GRect(0, BIBBLE_HEADER_HEIGHT, bounds.size.w, bounds.size.h - BIBBLE_HEADER_HEIGHT);
+  int16_t header_height = prv_header_height();
+  return GRect(0, header_height, bounds.size.w, bounds.size.h - header_height);
 #endif
 }
 
@@ -200,8 +240,9 @@ static GRect prv_reader_body_frame_for_bounds(GRect bounds) {
                bounds.size.w - (BIBBLE_ROUND_READER_SIDE_INSET * 2),
                bounds.size.h - BIBBLE_ROUND_READER_TOP_INSET - BIBBLE_ROUND_READER_BOTTOM_GAP);
 #else
-  return GRect(4, BIBBLE_HEADER_HEIGHT + 4, bounds.size.w - 8,
-               bounds.size.h - BIBBLE_HEADER_HEIGHT - 8);
+  int16_t header_height = prv_header_height();
+  return GRect(4, header_height + 4, bounds.size.w - 8,
+               bounds.size.h - header_height - 8);
 #endif
 }
 
@@ -285,18 +326,21 @@ static void prv_format_chapter_reference(char *dest, size_t dest_size, uint8_t b
 
 static void prv_header_frames_for_bounds(GRect bounds, GRect *header_frame, GRect *label_frame,
                                          GRect *time_frame) {
+  int16_t header_height = prv_header_height();
+  int16_t text_height = prv_header_text_height();
+  int16_t time_width = prv_header_time_width();
 #if defined(PBL_ROUND)
-  *header_frame = GRect(0, 0, bounds.size.w, BIBBLE_ROUND_HEADER_HEIGHT);
-  *label_frame = GRect(BIBBLE_ROUND_HEADER_SIDE_INSET, 4,
-                       bounds.size.w - (BIBBLE_ROUND_HEADER_SIDE_INSET * 2) - BIBBLE_HEADER_TIME_WIDTH,
-                       BIBBLE_HEADER_HEIGHT);
-  *time_frame = GRect(bounds.size.w - BIBBLE_ROUND_HEADER_SIDE_INSET - BIBBLE_HEADER_TIME_WIDTH,
-                      4, BIBBLE_HEADER_TIME_WIDTH, BIBBLE_HEADER_HEIGHT);
+  int16_t text_y = (header_height - text_height) / 2 + 1;
+  *header_frame = GRect(0, 0, bounds.size.w, header_height);
+  *label_frame = GRect(BIBBLE_ROUND_HEADER_SIDE_INSET, text_y,
+                       bounds.size.w - (BIBBLE_ROUND_HEADER_SIDE_INSET * 2) - time_width,
+                       text_height);
+  *time_frame = GRect(bounds.size.w - BIBBLE_ROUND_HEADER_SIDE_INSET - time_width,
+                      text_y, time_width, text_height);
 #else
-  *header_frame = GRect(0, 0, bounds.size.w, BIBBLE_HEADER_HEIGHT);
-  *label_frame = GRect(4, 0, bounds.size.w - BIBBLE_HEADER_TIME_WIDTH - 8, BIBBLE_HEADER_HEIGHT);
-  *time_frame = GRect(bounds.size.w - BIBBLE_HEADER_TIME_WIDTH - 4, 0,
-                      BIBBLE_HEADER_TIME_WIDTH, BIBBLE_HEADER_HEIGHT);
+  *header_frame = GRect(0, 0, bounds.size.w, header_height);
+  *label_frame = GRect(4, 0, bounds.size.w - time_width - 8, text_height);
+  *time_frame = GRect(bounds.size.w - time_width - 4, 0, time_width, text_height);
 #endif
 }
 
@@ -312,19 +356,38 @@ static void prv_create_header(Layer *root, GRect bounds, Layer **header_out, Tex
   layer_add_child(root, *header_out);
 
   *label_out = text_layer_create(label_frame);
-  text_layer_set_font(*label_out, fonts_get_system_font(FONT_KEY_GOTHIC_14));
+  text_layer_set_font(*label_out, prv_header_font());
   text_layer_set_overflow_mode(*label_out, GTextOverflowModeTrailingEllipsis);
   text_layer_set_background_color(*label_out, GColorClear);
   text_layer_set_text_color(*label_out, GColorBlack);
   layer_add_child(*header_out, text_layer_get_layer(*label_out));
 
   *time_out = text_layer_create(time_frame);
-  text_layer_set_font(*time_out, fonts_get_system_font(FONT_KEY_GOTHIC_14));
+  text_layer_set_font(*time_out, prv_header_font());
   text_layer_set_overflow_mode(*time_out, GTextOverflowModeFill);
   text_layer_set_background_color(*time_out, GColorClear);
   text_layer_set_text_color(*time_out, GColorBlack);
   text_layer_set_text_alignment(*time_out, GTextAlignmentRight);
   layer_add_child(*header_out, text_layer_get_layer(*time_out));
+}
+
+static void prv_relayout_header(Window *window, Layer *header, TextLayer *label, TextLayer *time_layer) {
+  GRect bounds;
+  GRect header_frame;
+  GRect label_frame;
+  GRect time_frame;
+
+  if (!window || !header || !label || !time_layer) {
+    return;
+  }
+
+  bounds = layer_get_bounds(window_get_root_layer(window));
+  prv_header_frames_for_bounds(bounds, &header_frame, &label_frame, &time_frame);
+  layer_set_frame(header, header_frame);
+  layer_set_frame(text_layer_get_layer(label), label_frame);
+  layer_set_frame(text_layer_get_layer(time_layer), time_frame);
+  text_layer_set_font(label, prv_header_font());
+  text_layer_set_font(time_layer, prv_header_font());
 }
 
 static void prv_destroy_header(Layer **header, TextLayer **label, TextLayer **time_layer) {
@@ -628,6 +691,11 @@ static BibbleCachedPage *prv_cache_find(uint8_t book, uint8_t chapter, uint16_t 
     }
   }
   return NULL;
+}
+
+static void prv_cache_clear(void) {
+  memset(s_page_cache, 0, sizeof(s_page_cache));
+  s_page_cache_clock = 0;
 }
 
 static BibbleCachedPage *prv_cache_store(uint8_t book, uint8_t chapter, uint8_t verse, uint16_t page,
@@ -1009,7 +1077,7 @@ static Layer *prv_grid_content_layer(BibbleGridKind kind) {
 
 static int prv_grid_content_height(BibbleGridKind kind, int viewport_height) {
   uint16_t rows = (prv_grid_item_count(kind) + BIBBLE_GRID_COLUMNS - 1) / BIBBLE_GRID_COLUMNS;
-  int content_height = rows * BIBBLE_GRID_CELL_HEIGHT;
+  int content_height = rows * prv_grid_cell_height();
 
   return content_height < viewport_height ? viewport_height : content_height;
 }
@@ -1052,6 +1120,7 @@ static void prv_grid_ensure_selected_visible(BibbleGridKind kind, bool animated)
   int viewport_top;
   int viewport_bottom;
   int next_y;
+  int cell_height = prv_grid_cell_height();
 
   if (!scroll_layer || selected >= prv_grid_item_count(kind)) {
     return;
@@ -1060,8 +1129,8 @@ static void prv_grid_ensure_selected_visible(BibbleGridKind kind, bool animated)
   scroll_root = scroll_layer_get_layer(scroll_layer);
   bounds = layer_get_bounds(scroll_root);
   offset = scroll_layer_get_content_offset(scroll_layer);
-  cell_top = (selected / BIBBLE_GRID_COLUMNS) * BIBBLE_GRID_CELL_HEIGHT;
-  cell_bottom = cell_top + BIBBLE_GRID_CELL_HEIGHT;
+  cell_top = (selected / BIBBLE_GRID_COLUMNS) * cell_height;
+  cell_bottom = cell_top + cell_height;
   viewport_top = -offset.y;
   viewport_bottom = viewport_top + bounds.size.h;
   next_y = offset.y;
@@ -1108,7 +1177,8 @@ static const char *prv_grid_item_label(BibbleGridKind kind, uint16_t index, char
 
 static void prv_grid_draw(BibbleGridKind kind, Layer *layer, GContext *ctx) {
   GRect bounds = layer_get_bounds(layer);
-  GFont font = fonts_get_system_font(FONT_KEY_GOTHIC_24_BOLD);
+  GFont font = prv_grid_font();
+  int16_t cell_height = prv_grid_cell_height();
   uint16_t count = prv_grid_item_count(kind);
   uint16_t selected = prv_grid_selected_index(kind);
   ScrollLayer *scroll_layer = prv_grid_scroll_layer(kind);
@@ -1135,8 +1205,8 @@ static void prv_grid_draw(BibbleGridKind kind, Layer *layer, GContext *ctx) {
     visible_bottom = visible_top;
   }
 
-  first_index = (visible_top / BIBBLE_GRID_CELL_HEIGHT) * BIBBLE_GRID_COLUMNS;
-  last_index = ((visible_bottom + BIBBLE_GRID_CELL_HEIGHT - 1) / BIBBLE_GRID_CELL_HEIGHT) *
+  first_index = (visible_top / cell_height) * BIBBLE_GRID_COLUMNS;
+  last_index = ((visible_bottom + cell_height - 1) / cell_height) *
                BIBBLE_GRID_COLUMNS;
   if (last_index > count) {
     last_index = count;
@@ -1149,10 +1219,10 @@ static void prv_grid_draw(BibbleGridKind kind, Layer *layer, GContext *ctx) {
     char label[8];
     uint8_t col = index % BIBBLE_GRID_COLUMNS;
     uint16_t row = index / BIBBLE_GRID_COLUMNS;
-    int16_t cell_top = row * BIBBLE_GRID_CELL_HEIGHT;
+    int16_t cell_top = row * cell_height;
     int16_t x = (bounds.size.w * col) / BIBBLE_GRID_COLUMNS;
     int16_t next_x = (bounds.size.w * (col + 1)) / BIBBLE_GRID_COLUMNS;
-    GRect cell = GRect(x, cell_top, next_x - x, BIBBLE_GRID_CELL_HEIGHT);
+    GRect cell = GRect(x, cell_top, next_x - x, cell_height);
     GRect text_frame = GRect(cell.origin.x + 1, cell.origin.y + 2, cell.size.w - 2, cell.size.h - 4);
     bool is_selected = index == selected;
 
@@ -1426,12 +1496,104 @@ static void prv_reader_window_load(Window *window) {
   layer_add_child(root, scroll_layer_get_layer(s_reader_scroll_layer));
 
   s_reader_body_layer = text_layer_create(GRect(0, 0, body_frame.size.w, body_frame.size.h));
-  text_layer_set_font(s_reader_body_layer, fonts_get_system_font(FONT_KEY_GOTHIC_14));
+  text_layer_set_font(s_reader_body_layer, prv_reader_font());
   text_layer_set_overflow_mode(s_reader_body_layer, GTextOverflowModeWordWrap);
   text_layer_set_background_color(s_reader_body_layer, GColorClear);
   scroll_layer_add_child(s_reader_scroll_layer, text_layer_get_layer(s_reader_body_layer));
 
   prv_update_reader_layers(true);
+}
+
+static void prv_relayout_grid_window(Window *window, BibbleGridKind kind, Layer *header,
+                                     TextLayer *label, TextLayer *time_layer) {
+  ScrollLayer *scroll_layer = prv_grid_scroll_layer(kind);
+  GRect bounds;
+  GRect frame;
+
+  prv_relayout_header(window, header, label, time_layer);
+  if (!window || !scroll_layer) {
+    return;
+  }
+
+  bounds = layer_get_bounds(window_get_root_layer(window));
+  frame = prv_grid_frame_for_bounds(bounds);
+  layer_set_frame(scroll_layer_get_layer(scroll_layer), frame);
+  prv_grid_reload(kind);
+}
+
+static void prv_relayout_for_font_size(void) {
+  GRect bounds;
+  GRect body_frame;
+
+  prv_relayout_grid_window(s_book_window, BibbleGridKindBook, s_book_header_layer,
+                           s_book_status_layer, s_book_time_layer);
+  prv_relayout_grid_window(s_chapter_window, BibbleGridKindChapter, s_chapter_header_layer,
+                           s_chapter_status_layer, s_chapter_time_layer);
+  prv_relayout_grid_window(s_verse_window, BibbleGridKindVerse, s_verse_header_layer,
+                           s_verse_status_layer, s_verse_time_layer);
+
+  prv_relayout_header(s_reader_window, s_reader_header_layer, s_reader_reference_layer,
+                      s_reader_time_layer);
+  if (!s_reader_window || !s_reader_scroll_layer || !s_reader_body_layer) {
+    return;
+  }
+
+  bounds = layer_get_bounds(window_get_root_layer(s_reader_window));
+  body_frame = prv_reader_body_frame_for_bounds(bounds);
+  layer_set_frame(scroll_layer_get_layer(s_reader_scroll_layer), body_frame);
+  text_layer_set_font(s_reader_body_layer, prv_reader_font());
+  prv_update_reader_layers(true);
+}
+
+static bool prv_parse_large_text(const char *value, bool *large_text_out) {
+  if (!value || !large_text_out) {
+    return false;
+  }
+  if (strcmp(value, "normal") == 0) {
+    *large_text_out = false;
+    return true;
+  }
+  if (strcmp(value, "large") == 0) {
+    *large_text_out = true;
+    return true;
+  }
+  return false;
+}
+
+static void prv_apply_font_size(const char *value) {
+  bool large_text;
+  bool reader_active;
+  uint8_t book;
+  uint8_t chapter;
+  uint8_t verse;
+
+  if (!prv_parse_large_text(value, &large_text) || large_text == s_large_text) {
+    return;
+  }
+
+  reader_active = window_stack_get_top_window() == s_reader_window;
+  book = s_current_book;
+  chapter = s_current_chapter;
+  verse = s_current_verse;
+
+  prv_remove_queued_prefetch();
+  s_prefetch_generation += 1;
+  s_prefetch_in_flight = false;
+  prv_cancel_page_request();
+  prv_cache_clear();
+
+  s_large_text = large_text;
+  persist_write_bool(BIBBLE_PERSIST_FONT_SIZE, s_large_text);
+  prv_relayout_for_font_size();
+
+  if (reader_active && book < BIBBLE_BOOK_COUNT && chapter >= 1 &&
+      chapter <= prv_chapter_count(book)) {
+    s_reader_text[0] = '\0';
+    s_reader_loading = true;
+    prv_update_reader_layers(true);
+    prv_set_reader_header_label("Loading");
+    prv_schedule_page_request(book, chapter, verse, 0);
+  }
 }
 
 static void prv_reader_window_unload(Window *window) {
@@ -1753,6 +1915,7 @@ static void prv_handle_page(const char *payload) {
   char *cursor = buffer;
   BibbleCachedPage *entry;
   uint16_t generation;
+  bool response_large_text;
   uint8_t book;
   uint8_t chapter;
   uint8_t verse;
@@ -1763,6 +1926,10 @@ static void prv_handle_page(const char *payload) {
 
   prv_copy_string(buffer, sizeof(buffer), payload);
   generation = (uint16_t)atoi(prv_next_field(&cursor));
+  if (!prv_parse_large_text(prv_next_field(&cursor), &response_large_text) ||
+      response_large_text != s_large_text) {
+    return;
+  }
   book = (uint8_t)atoi(prv_next_field(&cursor));
   chapter = (uint8_t)atoi(prv_next_field(&cursor));
   verse = (uint8_t)atoi(prv_next_field(&cursor));
@@ -1773,7 +1940,6 @@ static void prv_handle_page(const char *payload) {
   if (book >= BIBBLE_BOOK_COUNT || chapter < 1 || chapter > prv_chapter_count(book)) {
     return;
   }
-  entry = prv_cache_store(book, chapter, verse, page, page_count, text);
   should_apply = window_stack_get_top_window() == s_reader_window && s_reader_loading;
   if (generation) {
     should_apply = should_apply && generation == s_page_request_generation;
@@ -1781,10 +1947,12 @@ static void prv_handle_page(const char *payload) {
     should_apply = should_apply && book == s_current_book && chapter == s_current_chapter &&
                    verse == s_current_verse;
   }
-  if (should_apply) {
-    prv_cancel_page_response_timer();
-    prv_apply_cached_page(entry);
+  if (!should_apply) {
+    return;
   }
+  entry = prv_cache_store(book, chapter, verse, page, page_count, text);
+  prv_cancel_page_response_timer();
+  prv_apply_cached_page(entry);
 }
 
 static void prv_handle_prefetch_page(const char *payload) {
@@ -1793,6 +1961,7 @@ static void prv_handle_prefetch_page(const char *payload) {
   BibbleCachedPage *entry;
   BibblePageCursor *prefetch_cursor;
   uint16_t generation;
+  bool response_large_text;
   uint8_t book;
   uint8_t chapter;
   uint8_t verse;
@@ -1802,6 +1971,10 @@ static void prv_handle_prefetch_page(const char *payload) {
 
   prv_copy_string(buffer, sizeof(buffer), payload);
   generation = (uint16_t)atoi(prv_next_field(&cursor));
+  if (!prv_parse_large_text(prv_next_field(&cursor), &response_large_text) ||
+      response_large_text != s_large_text) {
+    return;
+  }
   book = (uint8_t)atoi(prv_next_field(&cursor));
   chapter = (uint8_t)atoi(prv_next_field(&cursor));
   verse = (uint8_t)atoi(prv_next_field(&cursor));
@@ -1875,6 +2048,8 @@ static void prv_inbox_received(DictionaryIterator *iter, void *context) {
     prv_handle_page(payload);
   } else if (strcmp(type, BIBBLE_MSG_PREFETCH_PAGE) == 0) {
     prv_handle_prefetch_page(payload);
+  } else if (strcmp(type, BIBBLE_MSG_SETTINGS) == 0) {
+    prv_apply_font_size(payload);
   } else if (strcmp(type, BIBBLE_MSG_NAVIGATE) == 0) {
     prv_handle_navigate(payload);
   } else if (strcmp(type, BIBBLE_MSG_ERROR) == 0) {
@@ -1967,7 +2142,7 @@ static bool prv_grid_index_from_touch(BibbleGridKind kind, int x, int y, uint16_
   }
 
   col = (content_x * BIBBLE_GRID_COLUMNS) / bounds.size.w;
-  row = content_y / BIBBLE_GRID_CELL_HEIGHT;
+  row = content_y / prv_grid_cell_height();
   index = (uint16_t)(row * BIBBLE_GRID_COLUMNS + col);
   if (index >= prv_grid_item_count(kind)) {
     return false;
@@ -2071,6 +2246,8 @@ static void prv_touch_handler(const TouchEvent *event, void *context) {
 }
 
 static void prv_init(void) {
+  s_large_text = persist_exists(BIBBLE_PERSIST_FONT_SIZE) &&
+                 persist_read_bool(BIBBLE_PERSIST_FONT_SIZE);
   app_message_register_inbox_received(prv_inbox_received);
   app_message_register_inbox_dropped(prv_inbox_dropped);
   app_message_register_outbox_sent(prv_outbox_sent);

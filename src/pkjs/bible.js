@@ -2,8 +2,8 @@
 
 var KJV_META = require("./bible-meta");
 var KJV_SOURCE = require("../common/kjv-source");
+var BibbleSettings = require("../common/settings");
 
-var PAGE_CHAR_LIMIT = 360;
 var CHAPTER_PAGE_CACHE_LIMIT = 12;
 var TEXT_BOOK_CACHE_LIMIT = 4;
 var KJV_DOWNLOAD_TIMEOUT_MS = 30000;
@@ -145,6 +145,7 @@ var corpusAvailable = false;
 var loadStateValue = "idle";
 var loadError = "";
 var loadCallbacks = [];
+var paginationFontSize = BibbleSettings.FONT_SIZE_NORMAL;
 
 function books() {
   return KJV_META;
@@ -172,6 +173,18 @@ function touchCacheKey(keys, key, limit, evict) {
 function resetPageCache() {
   pageCache = {};
   pageCacheKeys = [];
+}
+
+function setFontSize(fontSize) {
+  var normalized = BibbleSettings.normalizeFontSize(fontSize);
+  var changed = normalized !== paginationFontSize;
+
+  paginationFontSize = normalized;
+  return changed;
+}
+
+function fontSize() {
+  return paginationFontSize;
 }
 
 function touchPageCache(key) {
@@ -1086,7 +1099,8 @@ function getAdjacentPage(bookIndex, chapter, page, delta) {
 }
 
 function getChapterCache(bookIndex, chapter) {
-  var key = String(bookIndex) + ":" + String(chapter);
+  var pageCharLimit = BibbleSettings.pageCharLimit(paginationFontSize);
+  var key = paginationFontSize + ":" + String(bookIndex) + ":" + String(chapter);
   var verses;
   var pages = [];
   var pageFirstVerse = [];
@@ -1109,7 +1123,8 @@ function getChapterCache(bookIndex, chapter) {
   }
 
   for (index = 0; index < verses.length; index += 1) {
-    current = appendVerseLine(pages, pageFirstVerse, versePage, current, index + 1, String(index + 1) + ". " + verses[index]);
+    current = appendVerseLine(pages, pageFirstVerse, versePage, current, index + 1,
+                              String(index + 1) + ". " + verses[index], pageCharLimit);
   }
   if (current) {
     if (!pageFirstVerse[pages.length + 1]) {
@@ -1129,17 +1144,17 @@ function getChapterCache(bookIndex, chapter) {
   });
 }
 
-function appendVerseLine(pages, pageFirstVerse, versePage, current, verse, line) {
+function appendVerseLine(pages, pageFirstVerse, versePage, current, verse, line, pageCharLimit) {
   var chunks;
   var chunkIndex;
   var candidate;
 
-  if (line.length > PAGE_CHAR_LIMIT) {
+  if (line.length > pageCharLimit) {
     if (current) {
       pages.push(current);
       current = "";
     }
-    chunks = splitLongLine(line, PAGE_CHAR_LIMIT);
+    chunks = splitLongLine(line, pageCharLimit);
     for (chunkIndex = 0; chunkIndex < chunks.length; chunkIndex += 1) {
       versePage[verse] = versePage[verse] || pages.length + 1;
       pageFirstVerse[pages.length + 1] = verse;
@@ -1153,7 +1168,7 @@ function appendVerseLine(pages, pageFirstVerse, versePage, current, verse, line)
   }
 
   candidate = current ? current + "\n" + line : line;
-  if (current && candidate.length > PAGE_CHAR_LIMIT) {
+  if (current && candidate.length > pageCharLimit) {
     pages.push(current);
     current = line;
   } else {
@@ -1245,6 +1260,8 @@ module.exports = {
   loadState: loadState,
   lastLoadError: lastLoadError,
   cacheInfo: cacheInfo,
+  setFontSize: setFontSize,
+  fontSize: fontSize,
   loadFromBooks: loadFromBooks,
   loadFromJsonText: loadFromJsonText
 };

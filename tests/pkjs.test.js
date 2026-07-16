@@ -23,11 +23,13 @@ function createPebbleMock(options) {
   var listeners = {};
   var sent = [];
   var pending = [];
+  var openedUrls = [];
 
   options = options || {};
 
   return {
     sent: sent,
+    openedUrls: openedUrls,
     addEventListener: function(type, handler) {
       listeners[type] = handler;
     },
@@ -50,6 +52,9 @@ function createPebbleMock(options) {
         success();
       }
     },
+    openURL: function(url) {
+      openedUrls.push(url);
+    },
     ackNext: function() {
       var success = pending.shift();
       assert.strictEqual(typeof success, "function", "pending send callback should exist");
@@ -58,10 +63,25 @@ function createPebbleMock(options) {
   };
 }
 
+function createMemoryStorage(initial) {
+  var values = initial || {};
+
+  return {
+    values: values,
+    getItem: function(key) {
+      return Object.prototype.hasOwnProperty.call(values, key) ? values[key] : null;
+    },
+    setItem: function(key, value) {
+      values[key] = String(value);
+    }
+  };
+}
+
 function withPkjs(options, work) {
   var previousPebble = global.Pebble;
   var previousXmlHttpRequest = global.XMLHttpRequest;
   var previousSetTimeout = global.setTimeout;
+  var previousLocalStorage = global.localStorage;
   var pebble;
 
   if (typeof options === "function") {
@@ -75,6 +95,11 @@ function withPkjs(options, work) {
     this.open = function() {};
     this.send = function() {};
   };
+  if (options.storage) {
+    global.localStorage = options.storage;
+  } else {
+    delete global.localStorage;
+  }
   if (options.immediateTimers) {
     global.setTimeout = function(callback) {
       callback();
@@ -100,6 +125,11 @@ function withPkjs(options, work) {
       delete global.setTimeout;
     } else {
       global.setTimeout = previousSetTimeout;
+    }
+    if (previousLocalStorage === undefined) {
+      delete global.localStorage;
+    } else {
+      global.localStorage = previousLocalStorage;
     }
     delete require.cache[require.resolve("../src/pkjs/index")];
     delete require.cache[require.resolve("../src/pkjs/bible")];
@@ -193,6 +223,45 @@ withPkjs(function(pebble) {
   });
 });
 
+var settingsStorage = createMemoryStorage();
+var settingsCalls = [];
+var settingsBible = pageBibleFake([]);
+settingsBible.setFontSize = function(fontSize) {
+  settingsCalls.push(fontSize);
+};
+
+withPkjs({
+  bible: settingsBible,
+  storage: settingsStorage
+}, function(pebble) {
+  pebble.emit("showConfiguration");
+  assert.strictEqual(pebble.openedUrls.length, 1);
+  assert(pebble.openedUrls[0].indexOf("https://nick1udwig.github.io/bibble/config/?state=") === 0);
+
+  pebble.emit("webviewclosed", {
+    response: encodeURIComponent(JSON.stringify({ fontSize: "large" }))
+  });
+  assert.deepStrictEqual(settingsCalls, ["normal", "large"]);
+  assert.deepStrictEqual(pebble.sent[0], {
+    0: "settings",
+    1: "large"
+  });
+  assert.deepStrictEqual(JSON.parse(settingsStorage.values["bibble.settings.v1"]), {
+    fontSize: "large"
+  });
+
+  pebble.emit("appmessage", {
+    payload: {
+      MessageType: "page_request",
+      Payload: "42|3|16|0|41"
+    }
+  });
+  assert.deepStrictEqual(pebble.sent[1], {
+    0: "page",
+    1: "41|large|42|3|16|2|5|John 3:16"
+  });
+});
+
 withPkjs(function(pebble) {
   pebble.emit("appmessage", {
     payload: {
@@ -204,6 +273,10 @@ withPkjs(function(pebble) {
   assert.deepStrictEqual(pebble.sent[0], {
     0: "status",
     1: "Select a book"
+  });
+  assert.deepStrictEqual(pebble.sent[1], {
+    0: "settings",
+    1: "normal"
   });
 });
 
@@ -242,7 +315,7 @@ withPkjs({
   });
   assert.deepStrictEqual(pebble.sent[1], {
     0: "page",
-    1: "0|42|3|16|2|5|16. For God so loved the world"
+    1: "0|normal|42|3|16|2|5|16. For God so loved the world"
   });
 });
 
@@ -262,7 +335,7 @@ withPkjs({
   ]);
   assert.deepStrictEqual(pebble.sent[0], {
     0: "page",
-    1: "23|42|3|16|2|5|John 3:16"
+    1: "23|normal|42|3|16|2|5|John 3:16"
   });
 });
 
@@ -289,11 +362,11 @@ withPkjs({
   ]);
   assert.deepStrictEqual(pebble.sent[0], {
     0: "page",
-    1: "24|42|3|1|2|5|previous"
+    1: "24|normal|42|3|1|2|5|previous"
   });
   assert.deepStrictEqual(pebble.sent[1], {
     0: "page",
-    1: "25|42|3|1|2|5|next"
+    1: "25|normal|42|3|1|2|5|next"
   });
 });
 
@@ -320,11 +393,11 @@ withPkjs({
   ]);
   assert.deepStrictEqual(pebble.sent[0], {
     0: "prefetch_page",
-    1: "17|42|3|1|2|5|previous"
+    1: "17|normal|42|3|1|2|5|previous"
   });
   assert.deepStrictEqual(pebble.sent[1], {
     0: "prefetch_page",
-    1: "17|42|3|1|2|5|next"
+    1: "17|normal|42|3|1|2|5|next"
   });
 });
 
