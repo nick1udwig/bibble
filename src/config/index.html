@@ -14,39 +14,61 @@
         <div>
           <p class="eyebrow">Bibble</p>
           <h1>Settings</h1>
-          <p class="lede">Choose how large scripture, selection labels, and headers appear on your watch.</p>
+          <p class="lede">Choose the size and weight used for scripture, selection labels, and headers.</p>
         </div>
       </header>
 
       <form id="settings-form" class="card">
-        <fieldset>
+        <fieldset class="setting-group">
           <legend>Text size</legend>
 
           <label class="choice">
-            <input type="radio" name="font-size" value="normal" checked />
+            <input type="radio" name="font-size" value="14" checked />
             <span>
-              <strong>Current</strong>
-              <small>Gothic 14 for scripture and headers</small>
+              <strong>14</strong>
+              <small>Compact</small>
             </span>
           </label>
 
           <label class="choice">
-            <input type="radio" name="font-size" value="large" />
+            <input type="radio" name="font-size" value="18" />
             <span>
-              <strong>Larger</strong>
-              <small>Gothic 18 Bold scripture with Gothic 18 headers</small>
+              <strong>18</strong>
+              <small>Medium</small>
             </span>
+          </label>
+
+          <label class="choice">
+            <input type="radio" name="font-size" value="24" />
+            <span>
+              <strong>24</strong>
+              <small>Large</small>
+            </span>
+          </label>
+        </fieldset>
+
+        <fieldset class="setting-group">
+          <legend>Boldness</legend>
+
+          <label class="choice">
+            <input type="radio" name="font-bold" value="regular" checked />
+            <span><strong>Not bold</strong></span>
+          </label>
+
+          <label class="choice">
+            <input type="radio" name="font-bold" value="bold" />
+            <span><strong>Yes, bold</strong></span>
           </label>
         </fieldset>
 
         <section class="preview-section" aria-labelledby="preview-title">
           <h2 id="preview-title">Preview</h2>
-          <div id="watch-preview" class="watch-preview" data-font-size="normal">
+          <div id="watch-preview" class="watch-preview" data-font-size="14" data-bold="false">
             <div class="preview-header">
               <span>John 3</span>
               <span>10:09</span>
             </div>
-            <p><b>16.</b> For God so loved the world, that he gave his only begotten Son.</p>
+            <p>16. For God so loved the world, that he gave his only begotten Son.</p>
           </div>
         </section>
 

@@ -18,31 +18,62 @@ function memoryStorage(initial) {
   };
 }
 
-assert.deepStrictEqual(Settings.normalizeSettings(null), { fontSize: "normal" });
-assert.deepStrictEqual(Settings.normalizeSettings({ fontSize: "large" }), { fontSize: "large" });
-assert.deepStrictEqual(Settings.normalizeSettings({ fontSize: "unexpected" }), { fontSize: "normal" });
-assert.strictEqual(Settings.pageCharLimit("normal"), 360);
-assert.strictEqual(Settings.pageCharLimit("large"), 200);
+assert.deepStrictEqual(Settings.normalizeSettings(null), { fontSize: "14", bold: false });
+assert.deepStrictEqual(
+  Settings.normalizeSettings({ fontSize: "large" }),
+  { fontSize: "18", bold: true },
+  "the previous large option should migrate to 18 Bold"
+);
+assert.deepStrictEqual(
+  Settings.normalizeSettings({ fontSize: "normal" }),
+  { fontSize: "14", bold: false }
+);
+assert.deepStrictEqual(
+  Settings.normalizeSettings({ fontSize: 24, bold: "bold" }),
+  { fontSize: "24", bold: true }
+);
+assert.deepStrictEqual(
+  Settings.normalizeSettings({ fontSize: "unexpected", bold: "yes" }),
+  { fontSize: "14", bold: true }
+);
+assert.strictEqual(Settings.profileKey({ fontSize: "14", bold: false }), "14r");
+assert.strictEqual(Settings.profileKey({ fontSize: "14", bold: true }), "14b");
+assert.strictEqual(Settings.profileKey({ fontSize: "18", bold: false }), "18r");
+assert.strictEqual(Settings.profileKey({ fontSize: "18", bold: true }), "18b");
+assert.strictEqual(Settings.profileKey({ fontSize: "24", bold: false }), "24r");
+assert.strictEqual(Settings.profileKey({ fontSize: "24", bold: true }), "24b");
+assert.strictEqual(Settings.pageCharLimit({ fontSize: "14", bold: false }), 360);
+assert.strictEqual(Settings.pageCharLimit({ fontSize: "14", bold: true }), 330);
+assert.strictEqual(Settings.pageCharLimit({ fontSize: "18", bold: false }), 220);
+assert.strictEqual(Settings.pageCharLimit({ fontSize: "18", bold: true }), 200);
+assert.strictEqual(Settings.pageCharLimit({ fontSize: "24", bold: false }), 150);
+assert.strictEqual(Settings.pageCharLimit({ fontSize: "24", bold: true }), 135);
 
 var storage = memoryStorage();
-assert.deepStrictEqual(Settings.loadSettings(storage), { fontSize: "normal" });
-Settings.saveSettings({ fontSize: "large", ignored: true }, storage);
-assert.deepStrictEqual(Settings.loadSettings(storage), { fontSize: "large" });
+assert.deepStrictEqual(Settings.loadSettings(storage), { fontSize: "14", bold: false });
+Settings.saveSettings({ fontSize: "24", bold: true, ignored: true }, storage);
+assert.deepStrictEqual(Settings.loadSettings(storage), { fontSize: "24", bold: true });
 
-var configUrl = Settings.buildConfigPageUrl("https://example.test/config/", { fontSize: "large" }, 123);
+var configUrl = Settings.buildConfigPageUrl(
+  "https://example.test/config/",
+  { fontSize: "24", bold: true },
+  123
+);
 assert(configUrl.indexOf("https://example.test/config/?state=") === 0);
 assert(configUrl.indexOf("&v=123") > 0);
 assert.deepStrictEqual(
   Settings.readConfigPageState(configUrl.slice(configUrl.indexOf("?"))),
-  { fontSize: "large" }
+  { fontSize: "24", bold: true }
 );
 assert.deepStrictEqual(
-  Settings.parseConfigPageResponse(encodeURIComponent(JSON.stringify({ fontSize: "large" }))),
-  { fontSize: "large" }
+  Settings.parseConfigPageResponse(
+    encodeURIComponent(JSON.stringify({ fontSize: "18", bold: false }))
+  ),
+  { fontSize: "18", bold: false }
 );
 assert.deepStrictEqual(
-  Settings.parseConfigPageResponse({ response: JSON.stringify({ fontSize: "normal" }) }),
-  { fontSize: "normal" }
+  Settings.parseConfigPageResponse({ response: JSON.stringify({ fontSize: "14", bold: true }) }),
+  { fontSize: "14", bold: true }
 );
 assert.strictEqual(Settings.parseConfigPageResponse("CANCELLED"), null);
 

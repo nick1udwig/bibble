@@ -14,26 +14,45 @@
 
   var STORAGE_KEY = "bibble.settings.v1";
   var CONFIG_PAGE_URL = "https://nick1udwig.github.io/bibble/config/";
-  var FONT_SIZE_NORMAL = "normal";
-  var FONT_SIZE_LARGE = "large";
-  var PAGE_CHAR_LIMIT_NORMAL = 360;
-  // Gothic 18 Bold uses fewer rows and columns than Gothic 14 on the 200x228
-  // display. Keep a conservative budget so large-text pages fit without
-  // excessive scrolling; the profile-keyed cache avoids repaginating on every read.
-  var PAGE_CHAR_LIMIT_LARGE = 200;
+  var FONT_SIZE_14 = "14";
+  var FONT_SIZE_18 = "18";
+  var FONT_SIZE_24 = "24";
+  // Bold faces are slightly wider, so each of the six profiles gets its own
+  // conservative page budget. Profile-keyed caching makes subsequent switches cheap.
+  var PAGE_CHAR_LIMITS = {
+    "14r": 360,
+    "14b": 330,
+    "18r": 220,
+    "18b": 200,
+    "24r": 150,
+    "24b": 135
+  };
 
   function normalizeFontSize(value) {
-    return value === FONT_SIZE_LARGE || value === 18 || value === "18" ||
-      value === 24 || value === "24"
-      ? FONT_SIZE_LARGE
-      : FONT_SIZE_NORMAL;
+    if (value === FONT_SIZE_24 || value === 24) {
+      return FONT_SIZE_24;
+    }
+    if (value === FONT_SIZE_18 || value === 18 || value === "large") {
+      return FONT_SIZE_18;
+    }
+    return FONT_SIZE_14;
+  }
+
+  function normalizeBold(value, legacyFontSize) {
+    if (value === undefined || value === null) {
+      return legacyFontSize === "large";
+    }
+    return value === true || value === 1 || value === "1" || value === "true" ||
+      value === "bold" || value === "yes";
   }
 
   function normalizeSettings(value) {
     var source = value && typeof value === "object" ? value : {};
+    var boldValue = source.bold !== undefined ? source.bold : source.fontBold;
 
     return {
-      fontSize: normalizeFontSize(source.fontSize)
+      fontSize: normalizeFontSize(source.fontSize),
+      bold: normalizeBold(boldValue, source.fontSize)
     };
   }
 
@@ -79,10 +98,16 @@
     return normalized;
   }
 
-  function pageCharLimit(fontSize) {
-    return normalizeFontSize(fontSize) === FONT_SIZE_LARGE
-      ? PAGE_CHAR_LIMIT_LARGE
-      : PAGE_CHAR_LIMIT_NORMAL;
+  function profileKey(value, bold) {
+    var normalized = value && typeof value === "object"
+      ? normalizeSettings(value)
+      : normalizeSettings({ fontSize: value, bold: bold });
+
+    return normalized.fontSize + (normalized.bold ? "b" : "r");
+  }
+
+  function pageCharLimit(value, bold) {
+    return PAGE_CHAR_LIMITS[profileKey(value, bold)];
   }
 
   function buildConfigPageUrl(baseUrl, settings, cacheBust) {
@@ -116,7 +141,8 @@
       return null;
     }
     if (typeof response === "object") {
-      if (response.fontSize !== undefined) {
+      if (response.fontSize !== undefined || response.bold !== undefined ||
+          response.fontBold !== undefined) {
         return normalizeSettings(response);
       }
       if (response.response !== undefined && response.response !== null) {
@@ -126,7 +152,8 @@
     }
 
     parsed = parseJsonValue(response);
-    return parsed && parsed.fontSize !== undefined ? normalizeSettings(parsed) : null;
+    return parsed && (parsed.fontSize !== undefined || parsed.bold !== undefined ||
+      parsed.fontBold !== undefined) ? normalizeSettings(parsed) : null;
   }
 
   function readConfigPageState(search) {
@@ -159,14 +186,16 @@
   return {
     STORAGE_KEY: STORAGE_KEY,
     CONFIG_PAGE_URL: CONFIG_PAGE_URL,
-    FONT_SIZE_NORMAL: FONT_SIZE_NORMAL,
-    FONT_SIZE_LARGE: FONT_SIZE_LARGE,
-    PAGE_CHAR_LIMIT_NORMAL: PAGE_CHAR_LIMIT_NORMAL,
-    PAGE_CHAR_LIMIT_LARGE: PAGE_CHAR_LIMIT_LARGE,
+    FONT_SIZE_14: FONT_SIZE_14,
+    FONT_SIZE_18: FONT_SIZE_18,
+    FONT_SIZE_24: FONT_SIZE_24,
+    PAGE_CHAR_LIMITS: PAGE_CHAR_LIMITS,
     normalizeFontSize: normalizeFontSize,
+    normalizeBold: normalizeBold,
     normalizeSettings: normalizeSettings,
     loadSettings: loadSettings,
     saveSettings: saveSettings,
+    profileKey: profileKey,
     pageCharLimit: pageCharLimit,
     buildConfigPageUrl: buildConfigPageUrl,
     parseConfigPageResponse: parseConfigPageResponse,

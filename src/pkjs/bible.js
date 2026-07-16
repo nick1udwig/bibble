@@ -145,7 +145,7 @@ var corpusAvailable = false;
 var loadStateValue = "idle";
 var loadError = "";
 var loadCallbacks = [];
-var paginationFontSize = BibbleSettings.FONT_SIZE_NORMAL;
+var paginationSettings = BibbleSettings.normalizeSettings(null);
 
 function books() {
   return KJV_META;
@@ -175,16 +175,32 @@ function resetPageCache() {
   pageCacheKeys = [];
 }
 
-function setFontSize(fontSize) {
-  var normalized = BibbleSettings.normalizeFontSize(fontSize);
-  var changed = normalized !== paginationFontSize;
+function setSettings(settings) {
+  var normalized = BibbleSettings.normalizeSettings(settings);
+  var changed = BibbleSettings.profileKey(normalized) !==
+    BibbleSettings.profileKey(paginationSettings);
 
-  paginationFontSize = normalized;
+  paginationSettings = normalized;
   return changed;
 }
 
+function setFontSize(fontSize) {
+  return setSettings({
+    fontSize: fontSize,
+    bold: paginationSettings.bold
+  });
+}
+
 function fontSize() {
-  return paginationFontSize;
+  return paginationSettings.fontSize;
+}
+
+function fontBold() {
+  return paginationSettings.bold;
+}
+
+function fontProfile() {
+  return BibbleSettings.profileKey(paginationSettings);
 }
 
 function touchPageCache(key) {
@@ -1099,8 +1115,8 @@ function getAdjacentPage(bookIndex, chapter, page, delta) {
 }
 
 function getChapterCache(bookIndex, chapter) {
-  var pageCharLimit = BibbleSettings.pageCharLimit(paginationFontSize);
-  var key = paginationFontSize + ":" + String(bookIndex) + ":" + String(chapter);
+  var pageCharLimit = BibbleSettings.pageCharLimit(paginationSettings);
+  var key = fontProfile() + ":" + String(bookIndex) + ":" + String(chapter);
   var verses;
   var pages = [];
   var pageFirstVerse = [];
@@ -1260,8 +1276,11 @@ module.exports = {
   loadState: loadState,
   lastLoadError: lastLoadError,
   cacheInfo: cacheInfo,
+  setSettings: setSettings,
   setFontSize: setFontSize,
   fontSize: fontSize,
+  fontBold: fontBold,
+  fontProfile: fontProfile,
   loadFromBooks: loadFromBooks,
   loadFromJsonText: loadFromJsonText
 };

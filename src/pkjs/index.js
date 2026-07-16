@@ -37,9 +37,19 @@ var sendRetryTimer = null;
 var loadingBible = false;
 var currentSettings = BibbleSettings.loadSettings();
 
-if (typeof Bible.setFontSize === "function") {
-  Bible.setFontSize(currentSettings.fontSize);
+function applyBibleSettings() {
+  if (typeof Bible.setSettings === "function") {
+    Bible.setSettings(currentSettings);
+  } else if (typeof Bible.setFontSize === "function") {
+    Bible.setFontSize(currentSettings.fontSize);
+  }
 }
+
+function currentFontProfile() {
+  return BibbleSettings.profileKey(currentSettings);
+}
+
+applyBibleSettings();
 
 Pebble.addEventListener("ready", function() {
   sendStatus("Select a book");
@@ -78,9 +88,7 @@ Pebble.addEventListener("webviewclosed", function(event) {
     return;
   }
   currentSettings = BibbleSettings.saveSettings(response);
-  if (typeof Bible.setFontSize === "function") {
-    Bible.setFontSize(currentSettings.fontSize);
-  }
+  applyBibleSettings();
   sendSettings();
 });
 
@@ -211,7 +219,7 @@ function sendPage(page, generation) {
     MessageType.page,
     truncateUtf8([
       generation || 0,
-      currentSettings.fontSize,
+      currentFontProfile(),
       page.bookIndex,
       page.chapter,
       page.verse,
@@ -227,7 +235,7 @@ function sendPrefetchPage(page, generation) {
     MessageType.prefetchPage,
     truncateUtf8([
       generation,
-      currentSettings.fontSize,
+      currentFontProfile(),
       page.bookIndex,
       page.chapter,
       page.verse,
@@ -243,7 +251,7 @@ function sendStatus(status) {
 }
 
 function sendSettings() {
-  sendEnvelope(MessageType.settings, currentSettings.fontSize);
+  sendEnvelope(MessageType.settings, currentFontProfile());
 }
 
 function sendError(message) {

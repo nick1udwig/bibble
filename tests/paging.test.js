@@ -18,6 +18,15 @@ Bible.loadFromBooks(testBooks({
 
 var firstPage = Bible.getChapterPage(0, 1, 1, 1);
 var normalPageCount = firstPage.pageCount;
+var profiles = [
+  { fontSize: "14", bold: false },
+  { fontSize: "14", bold: true },
+  { fontSize: "18", bold: false },
+  { fontSize: "18", bold: true },
+  { fontSize: "24", bold: false },
+  { fontSize: "24", bold: true }
+];
+var profileIndex;
 var pageNumber;
 var page;
 
@@ -29,26 +38,36 @@ for (pageNumber = 1; pageNumber <= firstPage.pageCount; pageNumber += 1) {
   );
 }
 
-assert.strictEqual(Bible.fontSize(), BibbleSettings.FONT_SIZE_NORMAL);
+assert.strictEqual(Bible.fontSize(), BibbleSettings.FONT_SIZE_14);
+assert.strictEqual(Bible.fontBold(), false);
+assert.strictEqual(Bible.fontProfile(), "14r");
 assert.strictEqual(Bible.cacheInfo().chapters, 1);
-assert.strictEqual(Bible.setFontSize(BibbleSettings.FONT_SIZE_LARGE), true);
-firstPage = Bible.getChapterPage(0, 1, 1, 1);
-assert(firstPage.pageCount > normalPageCount, "large text should split the chapter into more pages");
-assert.strictEqual(Bible.cacheInfo().chapters, 2, "each font profile should keep its own cached pages");
-for (pageNumber = 1; pageNumber <= firstPage.pageCount; pageNumber += 1) {
-  page = Bible.getChapterPage(0, 1, 0, pageNumber);
-  assert(
-    page.text.length <= BibbleSettings.PAGE_CHAR_LIMIT_LARGE,
-    "large-text page " + String(pageNumber) + " should use the smaller page budget"
+
+for (profileIndex = 1; profileIndex < profiles.length; profileIndex += 1) {
+  assert.strictEqual(Bible.setSettings(profiles[profileIndex]), true);
+  firstPage = Bible.getChapterPage(0, 1, 1, 1);
+  assert.strictEqual(
+    Bible.cacheInfo().chapters,
+    profileIndex + 1,
+    "each size and boldness combination should keep its own cached pages"
   );
+  for (pageNumber = 1; pageNumber <= firstPage.pageCount; pageNumber += 1) {
+    page = Bible.getChapterPage(0, 1, 0, pageNumber);
+    assert(
+      page.text.length <= BibbleSettings.pageCharLimit(profiles[profileIndex]),
+      Bible.fontProfile() + " page " + String(pageNumber) + " should use its profile budget"
+    );
+  }
 }
-assert.strictEqual(Bible.setFontSize(BibbleSettings.FONT_SIZE_NORMAL), true);
+
+assert(firstPage.pageCount > normalPageCount, "24 Bold should split the chapter into more pages");
+assert.strictEqual(Bible.setSettings(profiles[0]), true);
 assert.strictEqual(
   Bible.getChapterPage(0, 1, 1, 1).pageCount,
   normalPageCount,
-  "switching back should reuse the normal pagination profile"
+  "switching back should reuse the 14 Regular pagination profile"
 );
-assert.strictEqual(Bible.cacheInfo().chapters, 2, "switching back should reuse the cached profile");
+assert.strictEqual(Bible.cacheInfo().chapters, 6, "switching back should reuse the cached profile");
 
 page = Bible.getChapterPage(42, 3, 16, 0);
 assert.strictEqual(page.bookName, "John");

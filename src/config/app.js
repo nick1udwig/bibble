@@ -13,14 +13,35 @@
     return Settings.normalizeFontSize(selected ? selected.value : current.fontSize);
   }
 
-  function render(fontSize) {
-    var normalized = Settings.normalizeFontSize(fontSize);
-    var input = document.querySelector('input[name="font-size"][value="' + normalized + '"]');
+  function selectedBold() {
+    var selected = document.querySelector('input[name="font-bold"]:checked');
+    return Settings.normalizeBold(selected ? selected.value : current.bold);
+  }
 
-    if (input) {
-      input.checked = true;
+  function selectedSettings() {
+    return Settings.normalizeSettings({
+      fontSize: selectedFontSize(),
+      bold: selectedBold()
+    });
+  }
+
+  function render(settings) {
+    var normalized = Settings.normalizeSettings(settings);
+    var sizeInput = document.querySelector(
+      'input[name="font-size"][value="' + normalized.fontSize + '"]'
+    );
+    var boldInput = document.querySelector(
+      'input[name="font-bold"][value="' + (normalized.bold ? "bold" : "regular") + '"]'
+    );
+
+    if (sizeInput) {
+      sizeInput.checked = true;
     }
-    preview.setAttribute("data-font-size", normalized);
+    if (boldInput) {
+      boldInput.checked = true;
+    }
+    preview.setAttribute("data-font-size", normalized.fontSize);
+    preview.setAttribute("data-bold", normalized.bold ? "true" : "false");
   }
 
   function closeWith(settings) {
@@ -41,18 +62,16 @@
     }
   }
 
-  render(current.fontSize);
+  render(current);
 
   form.addEventListener("change", function() {
-    render(selectedFontSize());
+    render(selectedSettings());
     status.textContent = "Preview updated. Save to apply it to your watch.";
   });
 
   form.addEventListener("submit", function(event) {
     event.preventDefault();
-    current = Settings.saveSettings({
-      fontSize: selectedFontSize()
-    }, window.localStorage);
+    current = Settings.saveSettings(selectedSettings(), window.localStorage);
     status.textContent = "Saved. Returning to Pebble…";
     closeWith(current);
   });

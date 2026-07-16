@@ -82,6 +82,12 @@ fieldset {
   border: 0;
 }
 
+.setting-group + .setting-group {
+  margin-top: 24px;
+  padding-top: 20px;
+  border-top: 1px solid var(--line);
+}
+
 legend,
 .preview-section h2 {
   margin: 0 0 12px;
@@ -158,14 +164,20 @@ legend,
   line-height: 1.1;
 }
 
-.watch-preview[data-font-size="large"] .preview-header {
+.watch-preview[data-font-size="18"] .preview-header,
+.watch-preview[data-font-size="18"] p {
   font-size: 18px;
 }
 
-.watch-preview[data-font-size="large"] p {
-  font-size: 18px;
+.watch-preview[data-font-size="24"] .preview-header,
+.watch-preview[data-font-size="24"] p {
+  font-size: 24px;
+  line-height: 1.05;
+}
+
+.watch-preview[data-bold="true"] .preview-header,
+.watch-preview[data-bold="true"] p {
   font-weight: 700;
-  line-height: 1.1;
 }
 
 button {

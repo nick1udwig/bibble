@@ -13,24 +13,30 @@
 #define BIBBLE_DICTATION_LENGTH 128
 #define BIBBLE_REF_LENGTH 80
 #define BIBBLE_GRID_COLUMNS 3
-#define BIBBLE_GRID_CELL_HEIGHT_NORMAL 34
-#define BIBBLE_GRID_CELL_HEIGHT_LARGE 38
+#define BIBBLE_GRID_CELL_HEIGHT_14 24
+#define BIBBLE_GRID_CELL_HEIGHT_18 30
+#define BIBBLE_GRID_CELL_HEIGHT_24 38
 #define BIBBLE_ROUND_GRID_SIDE_INSET 30
 #define BIBBLE_ROUND_GRID_BOTTOM_GAP 4
 #define BIBBLE_TOUCH_TAP_MAX_PX 15
 #define BIBBLE_TOUCH_SWIPE_MIN_PX 40
-#define BIBBLE_HEADER_HEIGHT_NORMAL 18
-#define BIBBLE_HEADER_HEIGHT_LARGE 22
-#define BIBBLE_HEADER_TIME_WIDTH_NORMAL 42
-#define BIBBLE_HEADER_TIME_WIDTH_LARGE 52
+#define BIBBLE_HEADER_HEIGHT_14 18
+#define BIBBLE_HEADER_HEIGHT_18 22
+#define BIBBLE_HEADER_HEIGHT_24 28
+#define BIBBLE_HEADER_TIME_WIDTH_14 42
+#define BIBBLE_HEADER_TIME_WIDTH_18 52
+#define BIBBLE_HEADER_TIME_WIDTH_24 68
 #define BIBBLE_READER_TEXT_PADDING 4
 #define BIBBLE_READER_TEXT_MEASURE_HEIGHT 24000
 #define BIBBLE_ROUND_READER_SIDE_INSET 30
 #define BIBBLE_ROUND_READER_TOP_INSET 30
 #define BIBBLE_ROUND_READER_BOTTOM_GAP 10
-#define BIBBLE_ROUND_HEADER_HEIGHT_NORMAL 24
-#define BIBBLE_ROUND_HEADER_HEIGHT_LARGE 28
-#define BIBBLE_ROUND_HEADER_SIDE_INSET 76
+#define BIBBLE_ROUND_HEADER_HEIGHT_14 24
+#define BIBBLE_ROUND_HEADER_HEIGHT_18 28
+#define BIBBLE_ROUND_HEADER_HEIGHT_24 34
+#define BIBBLE_ROUND_HEADER_SIDE_INSET_14 76
+#define BIBBLE_ROUND_HEADER_SIDE_INSET_18 70
+#define BIBBLE_ROUND_HEADER_SIDE_INSET_24 60
 #define BIBBLE_PAGE_CACHE_SIZE 8
 #define BIBBLE_PREFETCH_STEP_COUNT 6
 #define BIBBLE_OUTBOX_QUEUE_SIZE 8
@@ -40,7 +46,9 @@
 #define BIBBLE_READY_DELAY_MS 300
 #define BIBBLE_PAGE_REQUEST_DELAY_MS 120
 #define BIBBLE_SELECT_HOLD_MS 700
-#define BIBBLE_PERSIST_FONT_SIZE 1
+#define BIBBLE_PERSIST_LEGACY_LARGE_TEXT 1
+#define BIBBLE_PERSIST_FONT_SIZE 2
+#define BIBBLE_PERSIST_FONT_BOLD 3
 
 #define BIBBLE_MSG_READY "ready"
 #define BIBBLE_MSG_PAGE_REQUEST "page_request"
@@ -108,7 +116,8 @@ static uint8_t s_pending_page_verse;
 static uint16_t s_pending_page;
 static uint16_t s_page_request_generation;
 static bool s_reader_loading;
-static bool s_large_text;
+static uint8_t s_font_size = 14;
+static bool s_bold_text;
 static bool s_select_hold_fired;
 static bool s_touch_subscribed;
 static bool s_touch_down;
@@ -185,35 +194,87 @@ static void prv_select_raw_down_handler(ClickRecognizerRef recognizer, void *con
 static void prv_select_raw_up_handler(ClickRecognizerRef recognizer, void *context);
 
 static int16_t prv_grid_cell_height(void) {
-  return s_large_text ? BIBBLE_GRID_CELL_HEIGHT_LARGE : BIBBLE_GRID_CELL_HEIGHT_NORMAL;
+  if (s_font_size == 24) {
+    return BIBBLE_GRID_CELL_HEIGHT_24;
+  }
+  if (s_font_size == 18) {
+    return BIBBLE_GRID_CELL_HEIGHT_18;
+  }
+  return BIBBLE_GRID_CELL_HEIGHT_14;
 }
 
 static int16_t prv_header_height(void) {
 #if defined(PBL_ROUND)
-  return s_large_text ? BIBBLE_ROUND_HEADER_HEIGHT_LARGE : BIBBLE_ROUND_HEADER_HEIGHT_NORMAL;
+  if (s_font_size == 24) {
+    return BIBBLE_ROUND_HEADER_HEIGHT_24;
+  }
+  if (s_font_size == 18) {
+    return BIBBLE_ROUND_HEADER_HEIGHT_18;
+  }
+  return BIBBLE_ROUND_HEADER_HEIGHT_14;
 #else
-  return s_large_text ? BIBBLE_HEADER_HEIGHT_LARGE : BIBBLE_HEADER_HEIGHT_NORMAL;
+  if (s_font_size == 24) {
+    return BIBBLE_HEADER_HEIGHT_24;
+  }
+  if (s_font_size == 18) {
+    return BIBBLE_HEADER_HEIGHT_18;
+  }
+  return BIBBLE_HEADER_HEIGHT_14;
 #endif
 }
 
 static int16_t prv_header_text_height(void) {
-  return s_large_text ? BIBBLE_HEADER_HEIGHT_LARGE : BIBBLE_HEADER_HEIGHT_NORMAL;
+  if (s_font_size == 24) {
+    return BIBBLE_HEADER_HEIGHT_24;
+  }
+  if (s_font_size == 18) {
+    return BIBBLE_HEADER_HEIGHT_18;
+  }
+  return BIBBLE_HEADER_HEIGHT_14;
 }
 
 static int16_t prv_header_time_width(void) {
-  return s_large_text ? BIBBLE_HEADER_TIME_WIDTH_LARGE : BIBBLE_HEADER_TIME_WIDTH_NORMAL;
+  if (s_font_size == 24) {
+    return BIBBLE_HEADER_TIME_WIDTH_24;
+  }
+  if (s_font_size == 18) {
+    return BIBBLE_HEADER_TIME_WIDTH_18;
+  }
+  return BIBBLE_HEADER_TIME_WIDTH_14;
+}
+
+#if defined(PBL_ROUND)
+static int16_t prv_round_header_side_inset(void) {
+  if (s_font_size == 24) {
+    return BIBBLE_ROUND_HEADER_SIDE_INSET_24;
+  }
+  if (s_font_size == 18) {
+    return BIBBLE_ROUND_HEADER_SIDE_INSET_18;
+  }
+  return BIBBLE_ROUND_HEADER_SIDE_INSET_14;
+}
+#endif
+
+static GFont prv_selected_font(void) {
+  if (s_font_size == 24) {
+    return fonts_get_system_font(s_bold_text ? FONT_KEY_GOTHIC_24_BOLD : FONT_KEY_GOTHIC_24);
+  }
+  if (s_font_size == 18) {
+    return fonts_get_system_font(s_bold_text ? FONT_KEY_GOTHIC_18_BOLD : FONT_KEY_GOTHIC_18);
+  }
+  return fonts_get_system_font(s_bold_text ? FONT_KEY_GOTHIC_14_BOLD : FONT_KEY_GOTHIC_14);
 }
 
 static GFont prv_header_font(void) {
-  return fonts_get_system_font(s_large_text ? FONT_KEY_GOTHIC_18 : FONT_KEY_GOTHIC_14);
+  return prv_selected_font();
 }
 
 static GFont prv_reader_font(void) {
-  return fonts_get_system_font(s_large_text ? FONT_KEY_GOTHIC_18_BOLD : FONT_KEY_GOTHIC_14);
+  return prv_selected_font();
 }
 
 static GFont prv_grid_font(void) {
-  return fonts_get_system_font(s_large_text ? FONT_KEY_GOTHIC_28_BOLD : FONT_KEY_GOTHIC_24_BOLD);
+  return prv_selected_font();
 }
 
 static void prv_copy_string(char *dest, size_t dest_size, const char *src) {
@@ -331,11 +392,12 @@ static void prv_header_frames_for_bounds(GRect bounds, GRect *header_frame, GRec
   int16_t time_width = prv_header_time_width();
 #if defined(PBL_ROUND)
   int16_t text_y = (header_height - text_height) / 2 + 1;
+  int16_t side_inset = prv_round_header_side_inset();
   *header_frame = GRect(0, 0, bounds.size.w, header_height);
-  *label_frame = GRect(BIBBLE_ROUND_HEADER_SIDE_INSET, text_y,
-                       bounds.size.w - (BIBBLE_ROUND_HEADER_SIDE_INSET * 2) - time_width,
+  *label_frame = GRect(side_inset, text_y,
+                       bounds.size.w - (side_inset * 2) - time_width,
                        text_height);
-  *time_frame = GRect(bounds.size.w - BIBBLE_ROUND_HEADER_SIDE_INSET - time_width,
+  *time_frame = GRect(bounds.size.w - side_inset - time_width,
                       text_y, time_width, text_height);
 #else
   *header_frame = GRect(0, 0, bounds.size.w, header_height);
@@ -1542,7 +1604,7 @@ static void prv_relayout_grid_window(Window *window, BibbleGridKind kind, Layer 
   prv_grid_reload(kind);
 }
 
-static void prv_relayout_for_font_size(void) {
+static void prv_relayout_for_font_profile(void) {
   GRect bounds;
   GRect body_frame;
 
@@ -1566,29 +1628,53 @@ static void prv_relayout_for_font_size(void) {
   prv_update_reader_layers(true);
 }
 
-static bool prv_parse_large_text(const char *value, bool *large_text_out) {
-  if (!value || !large_text_out) {
+static bool prv_valid_font_size(uint8_t font_size) {
+  return font_size == 14 || font_size == 18 || font_size == 24;
+}
+
+static bool prv_parse_font_profile(const char *value, uint8_t *font_size_out, bool *bold_out) {
+  uint8_t font_size;
+
+  if (!value || !font_size_out || !bold_out) {
     return false;
   }
   if (strcmp(value, "normal") == 0) {
-    *large_text_out = false;
+    *font_size_out = 14;
+    *bold_out = false;
     return true;
   }
   if (strcmp(value, "large") == 0) {
-    *large_text_out = true;
+    *font_size_out = 18;
+    *bold_out = true;
     return true;
   }
-  return false;
+  if (strlen(value) != 3 || (value[2] != 'r' && value[2] != 'b')) {
+    return false;
+  }
+
+  font_size = (uint8_t)atoi(value);
+  if (!prv_valid_font_size(font_size)) {
+    return false;
+  }
+  *font_size_out = font_size;
+  *bold_out = value[2] == 'b';
+  return true;
 }
 
-static void prv_apply_font_size(const char *value) {
-  bool large_text;
+static bool prv_font_profile_matches(uint8_t font_size, bool bold) {
+  return font_size == s_font_size && bold == s_bold_text;
+}
+
+static void prv_apply_font_profile(const char *value) {
+  uint8_t font_size;
+  bool bold;
   bool reader_active;
   uint8_t book;
   uint8_t chapter;
   uint8_t verse;
 
-  if (!prv_parse_large_text(value, &large_text) || large_text == s_large_text) {
+  if (!prv_parse_font_profile(value, &font_size, &bold) ||
+      prv_font_profile_matches(font_size, bold)) {
     return;
   }
 
@@ -1603,9 +1689,11 @@ static void prv_apply_font_size(const char *value) {
   prv_cancel_page_request();
   prv_cache_clear();
 
-  s_large_text = large_text;
-  persist_write_bool(BIBBLE_PERSIST_FONT_SIZE, s_large_text);
-  prv_relayout_for_font_size();
+  s_font_size = font_size;
+  s_bold_text = bold;
+  persist_write_int(BIBBLE_PERSIST_FONT_SIZE, s_font_size);
+  persist_write_bool(BIBBLE_PERSIST_FONT_BOLD, s_bold_text);
+  prv_relayout_for_font_profile();
 
   if (reader_active && book < BIBBLE_BOOK_COUNT && chapter >= 1 &&
       chapter <= prv_chapter_count(book)) {
@@ -1936,7 +2024,8 @@ static void prv_handle_page(const char *payload) {
   char *cursor = buffer;
   BibbleCachedPage *entry;
   uint16_t generation;
-  bool response_large_text;
+  uint8_t response_font_size;
+  bool response_bold;
   uint8_t book;
   uint8_t chapter;
   uint8_t verse;
@@ -1947,8 +2036,8 @@ static void prv_handle_page(const char *payload) {
 
   prv_copy_string(buffer, sizeof(buffer), payload);
   generation = (uint16_t)atoi(prv_next_field(&cursor));
-  if (!prv_parse_large_text(prv_next_field(&cursor), &response_large_text) ||
-      response_large_text != s_large_text) {
+  if (!prv_parse_font_profile(prv_next_field(&cursor), &response_font_size, &response_bold) ||
+      !prv_font_profile_matches(response_font_size, response_bold)) {
     return;
   }
   book = (uint8_t)atoi(prv_next_field(&cursor));
@@ -1982,7 +2071,8 @@ static void prv_handle_prefetch_page(const char *payload) {
   BibbleCachedPage *entry;
   BibblePageCursor *prefetch_cursor;
   uint16_t generation;
-  bool response_large_text;
+  uint8_t response_font_size;
+  bool response_bold;
   uint8_t book;
   uint8_t chapter;
   uint8_t verse;
@@ -1992,8 +2082,8 @@ static void prv_handle_prefetch_page(const char *payload) {
 
   prv_copy_string(buffer, sizeof(buffer), payload);
   generation = (uint16_t)atoi(prv_next_field(&cursor));
-  if (!prv_parse_large_text(prv_next_field(&cursor), &response_large_text) ||
-      response_large_text != s_large_text) {
+  if (!prv_parse_font_profile(prv_next_field(&cursor), &response_font_size, &response_bold) ||
+      !prv_font_profile_matches(response_font_size, response_bold)) {
     return;
   }
   book = (uint8_t)atoi(prv_next_field(&cursor));
@@ -2070,7 +2160,7 @@ static void prv_inbox_received(DictionaryIterator *iter, void *context) {
   } else if (strcmp(type, BIBBLE_MSG_PREFETCH_PAGE) == 0) {
     prv_handle_prefetch_page(payload);
   } else if (strcmp(type, BIBBLE_MSG_SETTINGS) == 0) {
-    prv_apply_font_size(payload);
+    prv_apply_font_profile(payload);
   } else if (strcmp(type, BIBBLE_MSG_NAVIGATE) == 0) {
     prv_handle_navigate(payload);
   } else if (strcmp(type, BIBBLE_MSG_ERROR) == 0) {
@@ -2267,8 +2357,18 @@ static void prv_touch_handler(const TouchEvent *event, void *context) {
 }
 
 static void prv_init(void) {
-  s_large_text = persist_exists(BIBBLE_PERSIST_FONT_SIZE) &&
-                 persist_read_bool(BIBBLE_PERSIST_FONT_SIZE);
+  bool legacy_large_text = persist_exists(BIBBLE_PERSIST_LEGACY_LARGE_TEXT) &&
+                           persist_read_bool(BIBBLE_PERSIST_LEGACY_LARGE_TEXT);
+  int32_t persisted_font_size = persist_exists(BIBBLE_PERSIST_FONT_SIZE)
+    ? persist_read_int(BIBBLE_PERSIST_FONT_SIZE)
+    : 0;
+
+  s_font_size = prv_valid_font_size((uint8_t)persisted_font_size)
+    ? (uint8_t)persisted_font_size
+    : (legacy_large_text ? 18 : 14);
+  s_bold_text = persist_exists(BIBBLE_PERSIST_FONT_BOLD)
+    ? persist_read_bool(BIBBLE_PERSIST_FONT_BOLD)
+    : legacy_large_text;
   app_message_register_inbox_received(prv_inbox_received);
   app_message_register_inbox_dropped(prv_inbox_dropped);
   app_message_register_outbox_sent(prv_outbox_sent);

@@ -226,8 +226,8 @@ withPkjs(function(pebble) {
 var settingsStorage = createMemoryStorage();
 var settingsCalls = [];
 var settingsBible = pageBibleFake([]);
-settingsBible.setFontSize = function(fontSize) {
-  settingsCalls.push(fontSize);
+settingsBible.setSettings = function(settings) {
+  settingsCalls.push(settings);
 };
 
 withPkjs({
@@ -239,15 +239,19 @@ withPkjs({
   assert(pebble.openedUrls[0].indexOf("https://nick1udwig.github.io/bibble/config/?state=") === 0);
 
   pebble.emit("webviewclosed", {
-    response: encodeURIComponent(JSON.stringify({ fontSize: "large" }))
+    response: encodeURIComponent(JSON.stringify({ fontSize: "24", bold: true }))
   });
-  assert.deepStrictEqual(settingsCalls, ["normal", "large"]);
+  assert.deepStrictEqual(settingsCalls, [
+    { fontSize: "14", bold: false },
+    { fontSize: "24", bold: true }
+  ]);
   assert.deepStrictEqual(pebble.sent[0], {
     0: "settings",
-    1: "large"
+    1: "24b"
   });
   assert.deepStrictEqual(JSON.parse(settingsStorage.values["bibble.settings.v1"]), {
-    fontSize: "large"
+    fontSize: "24",
+    bold: true
   });
 
   pebble.emit("appmessage", {
@@ -258,7 +262,7 @@ withPkjs({
   });
   assert.deepStrictEqual(pebble.sent[1], {
     0: "page",
-    1: "41|large|42|3|16|2|5|John 3:16"
+    1: "41|24b|42|3|16|2|5|John 3:16"
   });
 });
 
@@ -276,7 +280,7 @@ withPkjs(function(pebble) {
   });
   assert.deepStrictEqual(pebble.sent[1], {
     0: "settings",
-    1: "normal"
+    1: "14r"
   });
 });
 
@@ -315,7 +319,7 @@ withPkjs({
   });
   assert.deepStrictEqual(pebble.sent[1], {
     0: "page",
-    1: "0|normal|42|3|16|2|5|16. For God so loved the world"
+    1: "0|14r|42|3|16|2|5|16. For God so loved the world"
   });
 });
 
@@ -335,7 +339,7 @@ withPkjs({
   ]);
   assert.deepStrictEqual(pebble.sent[0], {
     0: "page",
-    1: "23|normal|42|3|16|2|5|John 3:16"
+    1: "23|14r|42|3|16|2|5|John 3:16"
   });
 });
 
@@ -362,11 +366,11 @@ withPkjs({
   ]);
   assert.deepStrictEqual(pebble.sent[0], {
     0: "page",
-    1: "24|normal|42|3|1|2|5|previous"
+    1: "24|14r|42|3|1|2|5|previous"
   });
   assert.deepStrictEqual(pebble.sent[1], {
     0: "page",
-    1: "25|normal|42|3|1|2|5|next"
+    1: "25|14r|42|3|1|2|5|next"
   });
 });
 
@@ -393,11 +397,11 @@ withPkjs({
   ]);
   assert.deepStrictEqual(pebble.sent[0], {
     0: "prefetch_page",
-    1: "17|normal|42|3|1|2|5|previous"
+    1: "17|14r|42|3|1|2|5|previous"
   });
   assert.deepStrictEqual(pebble.sent[1], {
     0: "prefetch_page",
-    1: "17|normal|42|3|1|2|5|next"
+    1: "17|14r|42|3|1|2|5|next"
   });
 });
 
