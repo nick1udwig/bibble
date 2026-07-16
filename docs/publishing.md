@@ -20,6 +20,8 @@ npm test
 npm run build:watch:release
 ```
 
+The release build minifies the packaged companion JavaScript and omits its source map from the PBW. The matching map remains available at `build/release/pebble-js-app.js.map` for debugging.
+
 ## Phone Install
 
 ```bash

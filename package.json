@@ -16,11 +16,12 @@
     "generate:data": "node scripts/generate-kjv-data.mjs /tmp/bibble-kjv.json",
     "test": "node tests/run.js",
     "build:watch": "pebble build",
-    "build:watch:release": "npm run build:watch && bash scripts/strip-pbw-sourcemap.sh",
+    "build:watch:release": "npm run build:watch && bash scripts/prepare-release-pbw.sh",
     "deploy:phone": "bash scripts/build-and-install-phone.sh"
   },
-  "dependencies": {},
-  "devDependencies": {},
+  "devDependencies": {
+    "uglify-js": "3.19.3"
+  },
   "pebble": {
     "displayName": "Bibble",
     "uuid": "879b9765-84be-48dd-b48c-f27fb2b3ac08",
