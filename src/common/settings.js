@@ -17,12 +17,14 @@
   var FONT_SIZE_NORMAL = "normal";
   var FONT_SIZE_LARGE = "large";
   var PAGE_CHAR_LIMIT_NORMAL = 360;
-  // Moving from Gothic 14 to 18 reduces usable line and column capacity together.
-  // 220 keeps each logical page at roughly the same rendered height as the 360-character profile.
-  var PAGE_CHAR_LIMIT_LARGE = 220;
+  // Gothic 24 uses substantially fewer rows and columns than Gothic 14 on the
+  // 200x228 display. Keep a conservative budget so large-text pages fit without
+  // excessive scrolling; the profile-keyed cache avoids repaginating on every read.
+  var PAGE_CHAR_LIMIT_LARGE = 150;
 
   function normalizeFontSize(value) {
-    return value === FONT_SIZE_LARGE || value === 18 || value === "18"
+    return value === FONT_SIZE_LARGE || value === 18 || value === "18" ||
+      value === 24 || value === "24"
       ? FONT_SIZE_LARGE
       : FONT_SIZE_NORMAL;
   }

@@ -209,7 +209,7 @@ static GFont prv_header_font(void) {
 }
 
 static GFont prv_reader_font(void) {
-  return fonts_get_system_font(s_large_text ? FONT_KEY_GOTHIC_18 : FONT_KEY_GOTHIC_14);
+  return fonts_get_system_font(s_large_text ? FONT_KEY_GOTHIC_24 : FONT_KEY_GOTHIC_14);
 }
 
 static GFont prv_grid_font(void) {

@@ -158,9 +158,13 @@ legend,
   line-height: 1.1;
 }
 
-.watch-preview[data-font-size="large"] .preview-header,
-.watch-preview[data-font-size="large"] p {
+.watch-preview[data-font-size="large"] .preview-header {
   font-size: 18px;
+}
+
+.watch-preview[data-font-size="large"] p {
+  font-size: 24px;
+  line-height: 1.05;
 }
 
 button {
