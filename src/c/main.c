@@ -12,6 +12,10 @@
 #define BIBBLE_PAYLOAD_LENGTH 600
 #define BIBBLE_DICTATION_LENGTH 128
 #define BIBBLE_REF_LENGTH 80
+#define BIBBLE_SEARCH_EXCERPT_LENGTH 68
+#define BIBBLE_SEARCH_OUTBOX_PAYLOAD_LENGTH 160
+#define BIBBLE_SEARCH_PAGE_SIZE 5
+#define BIBBLE_SEARCH_ROW_HEIGHT 40
 #define BIBBLE_GRID_COLUMNS 3
 #define BIBBLE_GRID_CELL_HEIGHT 38
 #define BIBBLE_ROUND_GRID_SIDE_INSET 30
@@ -52,9 +56,11 @@
 #define BIBBLE_MSG_PAGE_REQUEST "page_request"
 #define BIBBLE_MSG_PREFETCH_REQUEST "prefetch_request"
 #define BIBBLE_MSG_DICTATION_LOOKUP "dictation_lookup"
+#define BIBBLE_MSG_SEARCH_PAGE_REQUEST "search_page_request"
 #define BIBBLE_MSG_STATUS "status"
 #define BIBBLE_MSG_PAGE "page"
 #define BIBBLE_MSG_PREFETCH_PAGE "prefetch_page"
+#define BIBBLE_MSG_SEARCH_RESULTS "search_results"
 #define BIBBLE_MSG_SETTINGS "settings"
 #define BIBBLE_MSG_NAVIGATE "navigate"
 #define BIBBLE_MSG_ERROR "error"
@@ -63,17 +69,21 @@ static Window *s_book_window;
 static Window *s_chapter_window;
 static Window *s_verse_window;
 static Window *s_reader_window;
+static Window *s_search_window;
 static ScrollLayer *s_book_scroll_layer;
 static ScrollLayer *s_chapter_scroll_layer;
 static ScrollLayer *s_verse_scroll_layer;
 static ScrollLayer *s_reader_scroll_layer;
+static ScrollLayer *s_search_scroll_layer;
 static Layer *s_book_grid_layer;
 static Layer *s_chapter_grid_layer;
 static Layer *s_verse_grid_layer;
+static Layer *s_search_list_layer;
 static Layer *s_book_header_layer;
 static Layer *s_chapter_header_layer;
 static Layer *s_verse_header_layer;
 static Layer *s_reader_header_layer;
+static Layer *s_search_header_layer;
 static TextLayer *s_book_status_layer;
 static TextLayer *s_chapter_status_layer;
 static TextLayer *s_verse_status_layer;
@@ -83,6 +93,8 @@ static TextLayer *s_verse_time_layer;
 static TextLayer *s_reader_body_layer;
 static TextLayer *s_reader_reference_layer;
 static TextLayer *s_reader_time_layer;
+static TextLayer *s_search_status_layer;
+static TextLayer *s_search_time_layer;
 static AppTimer *s_ready_timer;
 static AppTimer *s_page_request_timer;
 static AppTimer *s_select_hold_timer;
@@ -98,6 +110,7 @@ static char s_verse_status[BIBBLE_STATUS_LENGTH] = "";
 static char s_reader_text[BIBBLE_READER_TEXT_LENGTH] = "";
 static char s_current_reference[BIBBLE_REF_LENGTH] = "";
 static char s_reader_reference[BIBBLE_REF_LENGTH] = "";
+static char s_search_query[BIBBLE_DICTATION_LENGTH] = "";
 static char s_header_time[8] = "";
 static uint8_t s_selected_book;
 static uint8_t s_selected_chapter = 1;
@@ -123,6 +136,13 @@ static bool s_touch_dragged;
 static int s_touch_down_x;
 static int s_touch_down_y;
 static int s_touch_last_y;
+static uint16_t s_search_generation;
+static uint16_t s_search_page_offset;
+static uint16_t s_search_total;
+static uint16_t s_search_pending_selection;
+static uint8_t s_search_hit_count;
+static uint8_t s_search_selected_index;
+static bool s_search_loading;
 
 typedef struct {
   bool valid;
@@ -143,10 +163,18 @@ typedef struct {
 } BibblePageCursor;
 
 typedef struct {
+  bool valid;
+  uint8_t book;
+  uint8_t chapter;
+  uint8_t verse;
+  char excerpt[BIBBLE_SEARCH_EXCERPT_LENGTH];
+} BibbleSearchHit;
+
+typedef struct {
   bool report_error;
   bool prefetch;
   char type[BIBBLE_OUTBOX_TYPE_LENGTH];
-  char payload[BIBBLE_DICTATION_LENGTH];
+  char payload[BIBBLE_SEARCH_OUTBOX_PAYLOAD_LENGTH];
 } BibbleOutgoingMessage;
 
 static BibbleCachedPage s_page_cache[BIBBLE_PAGE_CACHE_SIZE];
@@ -157,6 +185,7 @@ static int8_t s_prefetch_direction;
 static bool s_prefetch_in_flight;
 static BibblePageCursor s_prefetch_forward_cursor;
 static BibblePageCursor s_prefetch_backward_cursor;
+static BibbleSearchHit s_search_hits[BIBBLE_SEARCH_PAGE_SIZE];
 static BibbleOutgoingMessage s_outbox_queue[BIBBLE_OUTBOX_QUEUE_SIZE];
 static uint8_t s_outbox_count;
 static bool s_outbox_busy;
@@ -182,11 +211,13 @@ static void prv_schedule_page_request(uint8_t book, uint8_t chapter, uint8_t ver
 static void prv_show_chapter_window(uint8_t book, uint8_t chapter);
 static void prv_show_verse_window(uint8_t book, uint8_t chapter, uint8_t verse);
 static void prv_show_reader_window(uint8_t book, uint8_t chapter, uint8_t verse, bool request_page);
+static void prv_show_search_window(void);
 static void prv_start_dictation(void);
 static BibbleGridKind prv_active_grid(void);
 static void prv_touch_handler(const TouchEvent *event, void *context);
 static void prv_grid_click_config_provider(void *context);
 static void prv_reader_click_config_provider(void *context);
+static void prv_search_click_config_provider(void *context);
 static void prv_minute_tick_handler(struct tm *tick_time, TimeUnits units_changed);
 static void prv_select_raw_down_handler(ClickRecognizerRef recognizer, void *context);
 static void prv_select_raw_up_handler(ClickRecognizerRef recognizer, void *context);
@@ -269,6 +300,18 @@ static GFont prv_grid_font(void) {
   return fonts_get_system_font(FONT_KEY_GOTHIC_24_BOLD);
 }
 
+static GFont prv_search_reference_font(void) {
+  return fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD);
+}
+
+static GFont prv_search_excerpt_font(void) {
+  return fonts_get_system_font(FONT_KEY_GOTHIC_14);
+}
+
+static GFont prv_search_hit_font(void) {
+  return fonts_get_system_font(FONT_KEY_GOTHIC_14_BOLD);
+}
+
 static void prv_copy_string(char *dest, size_t dest_size, const char *src) {
   if (!dest || dest_size == 0) {
     return;
@@ -297,6 +340,10 @@ static GRect prv_reader_body_frame_for_bounds(GRect bounds) {
   return GRect(4, header_height + 4, bounds.size.w - 8,
                bounds.size.h - header_height - 8);
 #endif
+}
+
+static GRect prv_search_frame_for_bounds(GRect bounds) {
+  return prv_grid_frame_for_bounds(bounds);
 }
 
 static void prv_copy_payload_field(char *dest, size_t dest_size, const char *src) {
@@ -486,6 +533,9 @@ static void prv_update_header_time(void) {
   if (s_reader_time_layer) {
     text_layer_set_text(s_reader_time_layer, s_header_time);
   }
+  if (s_search_time_layer) {
+    text_layer_set_text(s_search_time_layer, s_header_time);
+  }
 }
 
 static void prv_restore_reader_header(void) {
@@ -553,6 +603,9 @@ static void prv_update_status_layers(void) {
     prv_format_verse_status();
     text_layer_set_text(s_verse_status_layer, s_verse_status);
   }
+  if (s_search_status_layer) {
+    text_layer_set_text(s_search_status_layer, s_search_query[0] ? s_search_query : "Bible hits");
+  }
 }
 
 static void prv_update_active_status_layer(void) {
@@ -564,6 +617,8 @@ static void prv_update_active_status_layer(void) {
     text_layer_set_text(s_chapter_status_layer, s_status);
   } else if (top == s_verse_window && s_verse_status_layer) {
     text_layer_set_text(s_verse_status_layer, s_status);
+  } else if (top == s_search_window && s_search_status_layer) {
+    text_layer_set_text(s_search_status_layer, s_status);
   }
 }
 
@@ -623,10 +678,13 @@ static void prv_schedule_outbox_retry(void) {
   }
 }
 
-static void prv_report_outbox_failure(bool prefetch, bool report_error) {
+static void prv_report_outbox_failure(bool prefetch, bool search, bool report_error) {
   if (prefetch) {
     s_prefetch_in_flight = false;
     return;
+  }
+  if (search) {
+    s_search_loading = false;
   }
   if (report_error) {
     prv_cancel_page_response_timer();
@@ -638,6 +696,7 @@ static void prv_report_outbox_failure(bool prefetch, bool report_error) {
 
 static void prv_finish_outbox_message(bool sent) {
   bool prefetch;
+  bool search;
   bool report_error;
 
   if (!s_outbox_count) {
@@ -646,11 +705,12 @@ static void prv_finish_outbox_message(bool sent) {
   }
 
   prefetch = s_outbox_queue[0].prefetch;
+  search = strcmp(s_outbox_queue[0].type, BIBBLE_MSG_SEARCH_PAGE_REQUEST) == 0;
   report_error = s_outbox_queue[0].report_error;
   prv_remove_outbox_message(0);
   s_outbox_busy = false;
   if (!sent) {
-    prv_report_outbox_failure(prefetch, report_error);
+    prv_report_outbox_failure(prefetch, search, report_error);
   }
   prv_flush_outbox_queue();
 }
@@ -677,6 +737,9 @@ static bool prv_enqueue_outbox_message(const char *type, const char *payload, bo
   }
 
   if (s_outbox_count >= BIBBLE_OUTBOX_QUEUE_SIZE) {
+    if (type && strcmp(type, BIBBLE_MSG_SEARCH_PAGE_REQUEST) == 0) {
+      s_search_loading = false;
+    }
     if (report_error) {
       s_reader_loading = false;
       prv_set_status("Phone queue full");
@@ -1408,6 +1471,428 @@ static void prv_verse_window_unload(Window *window) {
                                 &s_verse_status_layer, &s_verse_time_layer);
 }
 
+static int prv_search_content_height(int viewport_height) {
+  int content_height = s_search_hit_count * BIBBLE_SEARCH_ROW_HEIGHT;
+  return content_height < viewport_height ? viewport_height : content_height;
+}
+
+static int prv_clamp_search_offset(int offset_y) {
+  Layer *scroll_root;
+  GRect bounds;
+  GSize content_size;
+  int min_y;
+
+  if (!s_search_scroll_layer) {
+    return offset_y;
+  }
+  scroll_root = scroll_layer_get_layer(s_search_scroll_layer);
+  bounds = layer_get_bounds(scroll_root);
+  content_size = scroll_layer_get_content_size(s_search_scroll_layer);
+  min_y = bounds.size.h - content_size.h;
+  if (min_y > 0) {
+    min_y = 0;
+  }
+  if (offset_y > 0) {
+    return 0;
+  }
+  if (offset_y < min_y) {
+    return min_y;
+  }
+  return offset_y;
+}
+
+static void prv_search_ensure_selected_visible(bool animated) {
+  Layer *scroll_root;
+  GRect bounds;
+  GPoint offset;
+  int row_top;
+  int row_bottom;
+  int viewport_top;
+  int viewport_bottom;
+  int next_y;
+
+  if (!s_search_scroll_layer || s_search_selected_index >= s_search_hit_count) {
+    return;
+  }
+  scroll_root = scroll_layer_get_layer(s_search_scroll_layer);
+  bounds = layer_get_bounds(scroll_root);
+  offset = scroll_layer_get_content_offset(s_search_scroll_layer);
+  row_top = s_search_selected_index * BIBBLE_SEARCH_ROW_HEIGHT;
+  row_bottom = row_top + BIBBLE_SEARCH_ROW_HEIGHT;
+  viewport_top = -offset.y;
+  viewport_bottom = viewport_top + bounds.size.h;
+  next_y = offset.y;
+
+  if (row_top < viewport_top) {
+    next_y = -row_top;
+  } else if (row_bottom > viewport_bottom) {
+    next_y = -(row_bottom - bounds.size.h);
+  }
+  scroll_layer_set_content_offset(s_search_scroll_layer,
+                                  GPoint(0, prv_clamp_search_offset(next_y)), animated);
+}
+
+static void prv_search_reload(void) {
+  Layer *scroll_root;
+  GRect bounds;
+  GRect frame;
+  int content_height;
+
+  if (!s_search_scroll_layer || !s_search_list_layer) {
+    return;
+  }
+  scroll_root = scroll_layer_get_layer(s_search_scroll_layer);
+  bounds = layer_get_bounds(scroll_root);
+  content_height = prv_search_content_height(bounds.size.h);
+  frame = GRect(0, 0, bounds.size.w, content_height);
+  layer_set_frame(s_search_list_layer, frame);
+  scroll_layer_set_content_size(s_search_scroll_layer, GSize(bounds.size.w, content_height));
+  scroll_layer_set_content_offset(s_search_scroll_layer, GPointZero, false);
+  layer_mark_dirty(s_search_list_layer);
+  prv_search_ensure_selected_visible(false);
+}
+
+static bool prv_draw_search_excerpt_segment(GContext *ctx, const char *text, GFont font,
+                                            GRect frame, int *cursor_x) {
+  int right = frame.origin.x + frame.size.w;
+  int remaining = right - *cursor_x;
+  GSize natural_size;
+
+  if (!text || !text[0]) {
+    return true;
+  }
+  if (remaining <= 0) {
+    return false;
+  }
+
+  natural_size = graphics_text_layout_get_content_size(
+    text, font, GRect(0, 0, 1000, frame.size.h),
+    GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft);
+  if (natural_size.w > remaining) {
+    graphics_draw_text(ctx, text, font,
+                       GRect(*cursor_x, frame.origin.y, remaining, frame.size.h),
+                       GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft, NULL);
+    return false;
+  }
+
+  graphics_draw_text(ctx, text, font,
+                     GRect(*cursor_x, frame.origin.y, remaining, frame.size.h),
+                     GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft, NULL);
+  *cursor_x += natural_size.w;
+  return true;
+}
+
+static void prv_draw_search_excerpt(GContext *ctx, const char *marked_text, GRect frame) {
+  GFont regular_font = prv_search_excerpt_font();
+  GFont hit_font = prv_search_hit_font();
+  char segment[BIBBLE_SEARCH_EXCERPT_LENGTH];
+  size_t segment_length = 0;
+  int cursor_x = frame.origin.x;
+  bool highlighted = false;
+  const char *cursor = marked_text ? marked_text : "";
+
+  while (*cursor) {
+    if (*cursor == '{' || *cursor == '}') {
+      segment[segment_length] = '\0';
+      if (!prv_draw_search_excerpt_segment(ctx, segment,
+                                           highlighted ? hit_font : regular_font,
+                                           frame, &cursor_x)) {
+        return;
+      }
+      segment_length = 0;
+      highlighted = *cursor == '{';
+    } else if (segment_length + 1 < sizeof(segment)) {
+      segment[segment_length++] = *cursor;
+    }
+    cursor += 1;
+  }
+
+  segment[segment_length] = '\0';
+  prv_draw_search_excerpt_segment(ctx, segment,
+                                  highlighted ? hit_font : regular_font,
+                                  frame, &cursor_x);
+}
+
+static void prv_draw_search_empty_state(GContext *ctx, GRect bounds) {
+  const int16_t horizontal_padding = 4;
+  const int16_t vertical_padding = 8;
+  const int16_t gap = 6;
+  GFont title_font = prv_search_reference_font();
+  GFont query_font = prv_search_excerpt_font();
+  int16_t text_width = bounds.size.w - (horizontal_padding * 2);
+  int16_t max_height = bounds.size.h - (vertical_padding * 2);
+  GSize title_size;
+  GSize query_size;
+  int16_t query_height;
+  int16_t content_height;
+  int16_t content_y;
+  char heard[BIBBLE_DICTATION_LENGTH + 16];
+
+  snprintf(heard, sizeof(heard), "Heard:\n\"%s\"", s_search_query);
+  title_size = graphics_text_layout_get_content_size(
+    "No Bible hits", title_font, GRect(0, 0, text_width, max_height),
+    GTextOverflowModeWordWrap, GTextAlignmentCenter);
+  query_size = graphics_text_layout_get_content_size(
+    heard, query_font, GRect(0, 0, text_width, max_height),
+    GTextOverflowModeWordWrap, GTextAlignmentCenter);
+  query_height = query_size.h;
+  if (title_size.h + gap + query_height > max_height) {
+    query_height = max_height - title_size.h - gap;
+  }
+  if (query_height < 0) {
+    query_height = 0;
+  }
+  content_height = title_size.h + gap + query_height;
+  content_y = (bounds.size.h - content_height) / 2;
+
+  graphics_context_set_text_color(ctx, GColorBlack);
+  graphics_draw_text(ctx, "No Bible hits", title_font,
+                     GRect(horizontal_padding, content_y, text_width, title_size.h),
+                     GTextOverflowModeWordWrap, GTextAlignmentCenter, NULL);
+  graphics_draw_text(ctx, heard, query_font,
+                     GRect(horizontal_padding, content_y + title_size.h + gap,
+                           text_width, query_height),
+                     GTextOverflowModeWordWrap, GTextAlignmentCenter, NULL);
+}
+
+static void prv_search_list_update_proc(Layer *layer, GContext *ctx) {
+  GRect bounds = layer_get_bounds(layer);
+  GFont reference_font = prv_search_reference_font();
+  GPoint offset = s_search_scroll_layer
+    ? scroll_layer_get_content_offset(s_search_scroll_layer)
+    : GPointZero;
+  GRect viewport = s_search_scroll_layer
+    ? layer_get_bounds(scroll_layer_get_layer(s_search_scroll_layer))
+    : bounds;
+  int visible_top = -offset.y;
+  int visible_bottom = visible_top + viewport.size.h;
+  uint8_t first_index;
+  uint8_t last_index;
+  uint8_t index;
+
+  if (visible_top < 0) {
+    visible_top = 0;
+  }
+  if (visible_bottom > bounds.size.h) {
+    visible_bottom = bounds.size.h;
+  }
+  graphics_context_set_fill_color(ctx, GColorWhite);
+  graphics_fill_rect(ctx, GRect(0, visible_top, bounds.size.w, visible_bottom - visible_top),
+                     0, GCornerNone);
+
+  if (!s_search_loading && !s_search_hit_count) {
+    prv_draw_search_empty_state(ctx, bounds);
+    return;
+  }
+
+  first_index = visible_top / BIBBLE_SEARCH_ROW_HEIGHT;
+  last_index = (visible_bottom + BIBBLE_SEARCH_ROW_HEIGHT - 1) / BIBBLE_SEARCH_ROW_HEIGHT;
+  if (last_index > s_search_hit_count) {
+    last_index = s_search_hit_count;
+  }
+
+  for (index = first_index; index < last_index; index += 1) {
+    BibbleSearchHit *hit = &s_search_hits[index];
+    GRect cell = GRect(0, index * BIBBLE_SEARCH_ROW_HEIGHT,
+                       bounds.size.w, BIBBLE_SEARCH_ROW_HEIGHT);
+    GRect reference_frame = GRect(4, cell.origin.y, bounds.size.w - 8, 21);
+    GRect excerpt_frame = GRect(4, cell.origin.y + 19, bounds.size.w - 8, 18);
+    bool selected = index == s_search_selected_index;
+    char reference[BIBBLE_REF_LENGTH];
+
+    if (!hit->valid || hit->book >= BIBBLE_BOOK_COUNT) {
+      continue;
+    }
+    snprintf(reference, sizeof(reference), "%s %u:%u", BIBBLE_BOOK_NAMES[hit->book],
+             hit->chapter, hit->verse);
+
+    graphics_context_set_fill_color(ctx, selected ? GColorBlack : GColorWhite);
+    graphics_fill_rect(ctx, cell, 0, GCornerNone);
+    graphics_context_set_stroke_color(ctx, selected ? GColorWhite : GColorBlack);
+    graphics_context_set_text_color(ctx, selected ? GColorWhite : GColorBlack);
+    graphics_draw_rect(ctx, cell);
+    graphics_draw_text(ctx, reference, reference_font, reference_frame,
+                       GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft, NULL);
+    prv_draw_search_excerpt(ctx, hit->excerpt, excerpt_frame);
+  }
+}
+
+static void prv_search_window_load(Window *window) {
+  Layer *root = window_get_root_layer(window);
+  GRect bounds = layer_get_bounds(root);
+  GRect list_frame = prv_search_frame_for_bounds(bounds);
+  int content_height = prv_search_content_height(list_frame.size.h);
+
+  window_set_background_color(window, GColorWhite);
+  prv_create_header(root, bounds, &s_search_header_layer, &s_search_status_layer,
+                    &s_search_time_layer);
+  text_layer_set_text(s_search_status_layer, s_search_query[0] ? s_search_query : "Bible hits");
+
+  s_search_scroll_layer = scroll_layer_create(list_frame);
+  scroll_layer_set_shadow_hidden(s_search_scroll_layer, true);
+  layer_set_clips(scroll_layer_get_layer(s_search_scroll_layer), true);
+  layer_add_child(root, scroll_layer_get_layer(s_search_scroll_layer));
+
+  s_search_list_layer = layer_create(GRect(0, 0, list_frame.size.w, content_height));
+  layer_set_update_proc(s_search_list_layer, prv_search_list_update_proc);
+  scroll_layer_set_content_size(s_search_scroll_layer, GSize(list_frame.size.w, content_height));
+  scroll_layer_add_child(s_search_scroll_layer, s_search_list_layer);
+
+  window_set_click_config_provider(window, prv_search_click_config_provider);
+  prv_update_header_time();
+  prv_search_ensure_selected_visible(false);
+}
+
+static void prv_search_window_appear(Window *window) {
+  (void)window;
+  if (s_search_status_layer) {
+    text_layer_set_text(s_search_status_layer, s_search_query[0] ? s_search_query : "Bible hits");
+  }
+  prv_update_header_time();
+  prv_search_reload();
+}
+
+static void prv_search_window_unload(Window *window) {
+  (void)window;
+  if (s_search_list_layer) {
+    layer_destroy(s_search_list_layer);
+    s_search_list_layer = NULL;
+  }
+  if (s_search_scroll_layer) {
+    scroll_layer_destroy(s_search_scroll_layer);
+    s_search_scroll_layer = NULL;
+  }
+  prv_destroy_header(&s_search_header_layer, &s_search_status_layer, &s_search_time_layer);
+}
+
+static void prv_show_search_window(void) {
+  Window *top = window_stack_get_top_window();
+
+  if (!s_search_window) {
+    s_search_window = window_create();
+    window_set_window_handlers(s_search_window, (WindowHandlers){
+      .load = prv_search_window_load,
+      .appear = prv_search_window_appear,
+      .unload = prv_search_window_unload,
+    });
+  }
+
+  if (top == s_reader_window) {
+    window_stack_pop(false);
+    top = window_stack_get_top_window();
+  }
+  if (top != s_search_window) {
+    window_stack_push(s_search_window, true);
+  } else {
+    if (s_search_status_layer) {
+      text_layer_set_text(s_search_status_layer, s_search_query[0] ? s_search_query : "Bible hits");
+    }
+    prv_search_reload();
+  }
+}
+
+static void prv_request_search_page(uint16_t offset, uint16_t selection) {
+  char payload[BIBBLE_SEARCH_OUTBOX_PAYLOAD_LENGTH];
+
+  if (s_search_loading || !s_search_generation || !s_search_query[0] || offset >= s_search_total) {
+    return;
+  }
+  snprintf(payload, sizeof(payload), "%u|%u|%s", s_search_generation, offset, s_search_query);
+  s_search_pending_selection = selection;
+  s_search_loading = true;
+  if (s_search_status_layer) {
+    text_layer_set_text(s_search_status_layer, "Loading hits");
+  }
+  if (!prv_send_message(BIBBLE_MSG_SEARCH_PAGE_REQUEST, payload)) {
+    s_search_loading = false;
+  }
+}
+
+static void prv_search_move_selection(int delta, bool animated) {
+  int next = (int)s_search_selected_index + delta;
+
+  if (s_search_loading || !s_search_hit_count) {
+    return;
+  }
+  if (next < 0) {
+    if (s_search_page_offset > 0) {
+      uint16_t offset = s_search_page_offset >= BIBBLE_SEARCH_PAGE_SIZE
+        ? s_search_page_offset - BIBBLE_SEARCH_PAGE_SIZE
+        : 0;
+      prv_request_search_page(offset, s_search_page_offset - 1);
+    }
+    return;
+  }
+  if (next >= s_search_hit_count) {
+    if (s_search_page_offset + s_search_hit_count < s_search_total) {
+      uint16_t offset = s_search_page_offset + s_search_hit_count;
+      prv_request_search_page(offset, offset);
+    }
+    return;
+  }
+
+  s_search_selected_index = (uint8_t)next;
+  if (s_search_list_layer) {
+    layer_mark_dirty(s_search_list_layer);
+  }
+  prv_search_ensure_selected_visible(animated);
+}
+
+static void prv_search_select_current(void) {
+  BibbleSearchHit *hit;
+
+  if (s_search_loading || s_search_selected_index >= s_search_hit_count) {
+    return;
+  }
+  hit = &s_search_hits[s_search_selected_index];
+  if (!hit->valid) {
+    return;
+  }
+  prv_show_reader_window(hit->book, hit->chapter, hit->verse, true);
+}
+
+static void prv_scroll_search_by(int dy) {
+  Layer *scroll_root;
+  GRect bounds;
+  GSize content_size;
+  GPoint offset;
+  int min_y;
+  int next_y;
+
+  if (!s_search_scroll_layer || s_search_loading) {
+    return;
+  }
+  scroll_root = scroll_layer_get_layer(s_search_scroll_layer);
+  bounds = layer_get_bounds(scroll_root);
+  content_size = scroll_layer_get_content_size(s_search_scroll_layer);
+  min_y = bounds.size.h - content_size.h;
+  if (min_y > 0) {
+    min_y = 0;
+  }
+
+  offset = scroll_layer_get_content_offset(s_search_scroll_layer);
+  next_y = offset.y + dy;
+  if (next_y > 0) {
+    next_y = 0;
+    if (dy > 0 && s_search_page_offset > 0) {
+      uint16_t previous_offset = s_search_page_offset >= BIBBLE_SEARCH_PAGE_SIZE
+        ? s_search_page_offset - BIBBLE_SEARCH_PAGE_SIZE
+        : 0;
+      prv_request_search_page(previous_offset, s_search_page_offset - 1);
+      return;
+    }
+  } else if (next_y < min_y) {
+    next_y = min_y;
+    if (dy < 0 && s_search_page_offset + s_search_hit_count < s_search_total) {
+      uint16_t next_offset = s_search_page_offset + s_search_hit_count;
+      prv_request_search_page(next_offset, next_offset);
+      return;
+    }
+  }
+  scroll_layer_set_content_offset(s_search_scroll_layer,
+                                  GPoint(0, prv_clamp_search_offset(next_y)), false);
+}
+
 static void prv_show_chapter_window(uint8_t book, uint8_t chapter) {
   Window *top = window_stack_get_top_window();
   uint8_t chapter_count;
@@ -1599,6 +2084,7 @@ static void prv_relayout_grid_window(Window *window, BibbleGridKind kind, Layer 
 static void prv_relayout_for_font_profile(void) {
   GRect bounds;
   GRect body_frame;
+  GRect search_frame;
 
   prv_relayout_grid_window(s_book_window, BibbleGridKindBook, s_book_header_layer,
                            s_book_status_layer, s_book_time_layer);
@@ -1606,6 +2092,15 @@ static void prv_relayout_for_font_profile(void) {
                            s_chapter_status_layer, s_chapter_time_layer);
   prv_relayout_grid_window(s_verse_window, BibbleGridKindVerse, s_verse_header_layer,
                            s_verse_status_layer, s_verse_time_layer);
+
+  prv_relayout_header(s_search_window, s_search_header_layer, s_search_status_layer,
+                      s_search_time_layer);
+  if (s_search_window && s_search_scroll_layer) {
+    bounds = layer_get_bounds(window_get_root_layer(s_search_window));
+    search_frame = prv_search_frame_for_bounds(bounds);
+    layer_set_frame(scroll_layer_get_layer(s_search_scroll_layer), search_frame);
+    prv_search_reload();
+  }
 
   prv_relayout_header(s_reader_window, s_reader_header_layer, s_reader_reference_layer,
                       s_reader_time_layer);
@@ -1918,6 +2413,11 @@ static void prv_select_raw_up_handler(ClickRecognizerRef recognizer, void *conte
     return;
   }
 
+  if (window_stack_get_top_window() == s_search_window) {
+    prv_search_select_current();
+    return;
+  }
+
   kind = prv_active_grid();
   prv_grid_select_current(kind);
 }
@@ -1956,6 +2456,25 @@ static void prv_reader_click_config_provider(void *context) {
   window_raw_click_subscribe(BUTTON_ID_SELECT, prv_select_raw_down_handler, prv_select_raw_up_handler, NULL);
 }
 
+static void prv_search_up_handler(ClickRecognizerRef recognizer, void *context) {
+  (void)recognizer;
+  (void)context;
+  prv_search_move_selection(-1, true);
+}
+
+static void prv_search_down_handler(ClickRecognizerRef recognizer, void *context) {
+  (void)recognizer;
+  (void)context;
+  prv_search_move_selection(1, true);
+}
+
+static void prv_search_click_config_provider(void *context) {
+  (void)context;
+  window_single_repeating_click_subscribe(BUTTON_ID_UP, 150, prv_search_up_handler);
+  window_single_repeating_click_subscribe(BUTTON_ID_DOWN, 150, prv_search_down_handler);
+  window_raw_click_subscribe(BUTTON_ID_SELECT, prv_select_raw_down_handler, prv_select_raw_up_handler, NULL);
+}
+
 #if defined(PBL_MICROPHONE)
 static const char *prv_dictation_status_text(DictationSessionStatus status) {
   switch (status) {
@@ -1975,6 +2494,7 @@ static const char *prv_dictation_status_text(DictationSessionStatus status) {
 static void prv_dictation_callback(DictationSession *session, DictationSessionStatus status, char *transcription,
                                    void *context) {
   char clean_text[BIBBLE_DICTATION_LENGTH];
+  char payload[BIBBLE_SEARCH_OUTBOX_PAYLOAD_LENGTH];
 
   (void)session;
   (void)context;
@@ -1986,9 +2506,17 @@ static void prv_dictation_callback(DictationSession *session, DictationSessionSt
   }
 
   prv_copy_payload_field(clean_text, sizeof(clean_text), transcription);
+  s_search_generation += 1;
+  if (!s_search_generation) {
+    s_search_generation = 1;
+  }
+  prv_copy_string(s_search_query, sizeof(s_search_query), clean_text);
+  s_search_loading = false;
+  s_search_pending_selection = 0;
+  snprintf(payload, sizeof(payload), "%u|%s", s_search_generation, clean_text);
   prv_set_status(clean_text);
   prv_set_reader_header_label("Parsing");
-  prv_send_message(BIBBLE_MSG_DICTATION_LOOKUP, clean_text);
+  prv_send_message(BIBBLE_MSG_DICTATION_LOOKUP, payload);
 }
 #endif
 
@@ -2106,6 +2634,76 @@ static void prv_handle_prefetch_page(const char *payload) {
   prv_continue_prefetch();
 }
 
+static void prv_handle_search_results(const char *payload) {
+  char buffer[BIBBLE_PAYLOAD_LENGTH];
+  char *cursor = buffer;
+  BibbleSearchHit parsed_hits[BIBBLE_SEARCH_PAGE_SIZE];
+  uint16_t generation;
+  uint16_t offset;
+  uint16_t total;
+  uint8_t count;
+  uint8_t index;
+  bool paged_from_results = s_search_loading;
+  bool results_were_visible = window_stack_get_top_window() == s_search_window;
+
+  memset(parsed_hits, 0, sizeof(parsed_hits));
+  prv_copy_string(buffer, sizeof(buffer), payload);
+  generation = (uint16_t)atoi(prv_next_field(&cursor));
+  offset = (uint16_t)atoi(prv_next_field(&cursor));
+  total = (uint16_t)atoi(prv_next_field(&cursor));
+  count = (uint8_t)atoi(prv_next_field(&cursor));
+
+  if (generation != s_search_generation || count > BIBBLE_SEARCH_PAGE_SIZE ||
+      count > total || (count && (offset >= total || offset + count > total))) {
+    return;
+  }
+
+  for (index = 0; index < count; index += 1) {
+    BibbleSearchHit *hit = &parsed_hits[index];
+    hit->book = (uint8_t)atoi(prv_next_field(&cursor));
+    hit->chapter = (uint8_t)atoi(prv_next_field(&cursor));
+    hit->verse = (uint8_t)atoi(prv_next_field(&cursor));
+    prv_copy_string(hit->excerpt, sizeof(hit->excerpt), prv_next_field(&cursor));
+    if (hit->book >= BIBBLE_BOOK_COUNT || hit->chapter < 1 ||
+        hit->chapter > prv_chapter_count(hit->book) || hit->verse < 1 ||
+        hit->verse > prv_verse_count(hit->book, hit->chapter)) {
+      s_search_loading = false;
+      prv_set_status("Bad search results");
+      return;
+    }
+    hit->valid = true;
+  }
+
+  memset(s_search_hits, 0, sizeof(s_search_hits));
+  memcpy(s_search_hits, parsed_hits, sizeof(parsed_hits));
+  s_search_page_offset = offset;
+  s_search_total = total;
+  s_search_hit_count = count;
+  s_search_loading = false;
+
+  if (!total || !count) {
+    s_search_selected_index = 0;
+    prv_set_status("No Bible hits");
+    prv_set_reader_header_label(s_status);
+    if (paged_from_results && !results_were_visible) {
+      return;
+    }
+    prv_show_search_window();
+    return;
+  }
+
+  if (s_search_pending_selection >= offset &&
+      s_search_pending_selection < offset + count) {
+    s_search_selected_index = (uint8_t)(s_search_pending_selection - offset);
+  } else {
+    s_search_selected_index = 0;
+  }
+  if (paged_from_results && !results_were_visible) {
+    return;
+  }
+  prv_show_search_window();
+}
+
 static void prv_handle_navigate(const char *payload) {
   char buffer[BIBBLE_PAYLOAD_LENGTH];
   char *cursor = buffer;
@@ -2122,6 +2720,9 @@ static void prv_handle_navigate(const char *payload) {
 
   if (book >= BIBBLE_BOOK_COUNT) {
     return;
+  }
+  if (window_stack_get_top_window() == s_search_window) {
+    window_stack_pop(false);
   }
   prv_set_status(reference && reference[0] ? reference : BIBBLE_BOOK_NAMES[book]);
 
@@ -2151,6 +2752,8 @@ static void prv_inbox_received(DictionaryIterator *iter, void *context) {
     prv_handle_page(payload);
   } else if (strcmp(type, BIBBLE_MSG_PREFETCH_PAGE) == 0) {
     prv_handle_prefetch_page(payload);
+  } else if (strcmp(type, BIBBLE_MSG_SEARCH_RESULTS) == 0) {
+    prv_handle_search_results(payload);
   } else if (strcmp(type, BIBBLE_MSG_SETTINGS) == 0) {
     prv_apply_font_profile(payload);
   } else if (strcmp(type, BIBBLE_MSG_NAVIGATE) == 0) {
@@ -2158,6 +2761,7 @@ static void prv_inbox_received(DictionaryIterator *iter, void *context) {
   } else if (strcmp(type, BIBBLE_MSG_ERROR) == 0) {
     prv_cancel_page_response_timer();
     s_reader_loading = false;
+    s_search_loading = false;
     prv_set_status(payload[0] ? payload : "Error");
     prv_set_reader_header_label(s_status);
   }
@@ -2168,6 +2772,7 @@ static void prv_inbox_dropped(AppMessageResult reason, void *context) {
   (void)context;
   prv_cancel_page_response_timer();
   s_reader_loading = false;
+  s_search_loading = false;
   prv_set_status("Phone message dropped");
   prv_set_reader_header_label(s_status);
 }
@@ -2270,11 +2875,56 @@ static void prv_handle_grid_touch_tap(BibbleGridKind kind, int x, int y) {
   prv_grid_select_current(kind);
 }
 
+static bool prv_search_index_from_touch(int x, int y, uint8_t *index_out) {
+  Layer *scroll_root;
+  GRect frame;
+  GRect bounds;
+  GPoint offset;
+  GPoint point = GPoint(x, y);
+  int content_y;
+  uint8_t index;
+
+  if (!s_search_scroll_layer || !index_out) {
+    return false;
+  }
+  scroll_root = scroll_layer_get_layer(s_search_scroll_layer);
+  frame = layer_get_frame(scroll_root);
+  bounds = layer_get_bounds(scroll_root);
+  if (!grect_contains_point(&frame, &point)) {
+    return false;
+  }
+  offset = scroll_layer_get_content_offset(s_search_scroll_layer);
+  content_y = y - frame.origin.y - offset.y;
+  if (x < frame.origin.x || x >= frame.origin.x + bounds.size.w || content_y < 0) {
+    return false;
+  }
+  index = (uint8_t)(content_y / BIBBLE_SEARCH_ROW_HEIGHT);
+  if (index >= s_search_hit_count) {
+    return false;
+  }
+  *index_out = index;
+  return true;
+}
+
+static void prv_handle_search_touch_tap(int x, int y) {
+  uint8_t index;
+
+  if (!prv_search_index_from_touch(x, y, &index)) {
+    return;
+  }
+  s_search_selected_index = index;
+  if (s_search_list_layer) {
+    layer_mark_dirty(s_search_list_layer);
+  }
+  prv_search_select_current();
+}
+
 static void prv_touch_handler(const TouchEvent *event, void *context) {
   int dx;
   int dy;
   BibbleGridKind grid_kind;
   bool reader_active;
+  bool search_active;
 
   (void)context;
 
@@ -2283,7 +2933,8 @@ static void prv_touch_handler(const TouchEvent *event, void *context) {
   }
 
   reader_active = window_stack_get_top_window() == s_reader_window && s_reader_scroll_layer;
-  grid_kind = reader_active ? BibbleGridKindNone : prv_active_grid();
+  search_active = window_stack_get_top_window() == s_search_window && s_search_scroll_layer;
+  grid_kind = (reader_active || search_active) ? BibbleGridKindNone : prv_active_grid();
 
   switch (event->type) {
     case TouchEvent_Touchdown:
@@ -2307,6 +2958,11 @@ static void prv_touch_handler(const TouchEvent *event, void *context) {
         if (dy != 0) {
           prv_scroll_reader_by(dy);
         }
+      } else if (search_active) {
+        dy = event->y - s_touch_last_y;
+        if (dy != 0) {
+          prv_scroll_search_by(dy);
+        }
       } else if (grid_kind != BibbleGridKindNone) {
         dy = event->y - s_touch_last_y;
         if (dy != 0) {
@@ -2329,6 +2985,18 @@ static void prv_touch_handler(const TouchEvent *event, void *context) {
           window_stack_pop(true);
         } else if (!s_touch_dragged && prv_iabs(dy) > BIBBLE_TOUCH_SWIPE_MIN_PX) {
           prv_scroll_reader_by(dy);
+        }
+        break;
+      }
+
+      if (search_active) {
+        if (prv_iabs(dx) > BIBBLE_TOUCH_SWIPE_MIN_PX && prv_iabs(dx) > prv_iabs(dy) && dx > 0) {
+          window_stack_pop(true);
+        } else if (prv_iabs(dx) < BIBBLE_TOUCH_TAP_MAX_PX &&
+                   prv_iabs(dy) < BIBBLE_TOUCH_TAP_MAX_PX) {
+          prv_handle_search_touch_tap(s_touch_down_x, s_touch_down_y);
+        } else if (!s_touch_dragged && prv_iabs(dy) > BIBBLE_TOUCH_SWIPE_MIN_PX) {
+          prv_scroll_search_by(dy);
         }
         break;
       }
@@ -2406,6 +3074,10 @@ static void prv_deinit(void) {
     s_outbox_retry_timer = NULL;
   }
   prv_cancel_page_response_timer();
+  if (s_search_window) {
+    window_destroy(s_search_window);
+    s_search_window = NULL;
+  }
   if (s_reader_window) {
     window_destroy(s_reader_window);
     s_reader_window = NULL;

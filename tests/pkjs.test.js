@@ -214,6 +214,63 @@ function dictationBibleFake(calls) {
   };
 }
 
+function searchBibleFake(calls, results) {
+  return {
+    isLoaded: function() {
+      return true;
+    },
+    isSearchReady: function() {
+      return true;
+    },
+    ensureSearchReady: function(callback) {
+      callback(null);
+    },
+    parseReference: function(text) {
+      calls.push(["parse", text]);
+      return {
+        ok: false
+      };
+    },
+    search: function(text, offset, limit) {
+      calls.push(["search", text, offset, limit]);
+      if (typeof results === "function") {
+        return results(text, offset, limit);
+      }
+      return results || {
+        offset: offset,
+        total: 0,
+        hits: []
+      };
+    }
+  };
+}
+
+function installBibleFake(calls) {
+  var loaded = false;
+  var indexed = false;
+
+  return {
+    isLoaded: function() {
+      return loaded;
+    },
+    isSearchReady: function() {
+      return indexed;
+    },
+    ensureLoaded: function(callback) {
+      calls.push("download");
+      loaded = true;
+      callback(null);
+    },
+    ensureSearchReady: function(callback, progress) {
+      calls.push("index");
+      progress(0);
+      indexed = true;
+      progress(100);
+      callback(null);
+    }
+  };
+}
+
 withPkjs(function(pebble) {
   pebble.emit("ready");
 
@@ -221,6 +278,21 @@ withPkjs(function(pebble) {
     0: "status",
     1: "Select a book"
   });
+});
+
+var installCalls = [];
+withPkjs({
+  bible: installBibleFake(installCalls)
+}, function(pebble) {
+  pebble.emit("ready");
+
+  assert.deepStrictEqual(installCalls, ["download", "index"]);
+  assert.deepStrictEqual(pebble.sent, [
+    { 0: "status", 1: "Select a book" },
+    { 0: "status", 1: "Downloading Bible" },
+    { 0: "status", 1: "Indexing Bible 0%" },
+    { 0: "status", 1: "Select a book" }
+  ]);
 });
 
 var settingsStorage = createMemoryStorage();
@@ -284,18 +356,119 @@ withPkjs(function(pebble) {
   });
 });
 
-withPkjs(function(pebble) {
+var searchFallbackCalls = [];
+withPkjs({
+  bible: searchBibleFake(searchFallbackCalls, {
+    offset: 0,
+    total: 7,
+    hits: [
+      {
+        bookIndex: 42,
+        chapter: 3,
+        verse: 16,
+        excerpt: "For {God so loved} the world"
+      },
+      {
+        bookIndex: 61,
+        chapter: 4,
+        verse: 10,
+        excerpt: "not that we loved God|but"
+      }
+    ]
+  })
+}, function(pebble) {
   pebble.emit("appmessage", {
     payload: {
       MessageType: "dictation_lookup",
-      Payload: "not\rparseable|text"
+      Payload: "17|for God so loved"
     }
   });
 
+  assert.deepStrictEqual(searchFallbackCalls, [
+    ["parse", "for God so loved"],
+    ["search", "for God so loved", 0, 5]
+  ]);
   assert.deepStrictEqual(pebble.sent[0], {
-    0: "error",
-    1: "couldn't parse not parseable/text"
+    0: "search_results",
+    1: "17|0|7|2|42|3|16|For {God so loved} the world|61|4|10|not that we loved God/but"
   });
+});
+
+var searchPageCalls = [];
+withPkjs({
+  bible: searchBibleFake(searchPageCalls, function(text, offset) {
+    return {
+      offset: offset,
+      total: 8,
+      hits: [{
+        bookIndex: 44,
+        chapter: 8,
+        verse: 28,
+        excerpt: "all things work together for good"
+      }]
+    };
+  })
+}, function(pebble) {
+  pebble.emit("appmessage", {
+    payload: {
+      MessageType: "search_page_request",
+      Payload: "23|5|all things"
+    }
+  });
+
+  assert.deepStrictEqual(searchPageCalls, [
+    ["search", "all things", 5, 5]
+  ]);
+  assert.deepStrictEqual(pebble.sent[0], {
+    0: "search_results",
+    1: "23|5|8|1|44|8|28|all things work together for good"
+  });
+});
+
+withPkjs({
+  bible: searchBibleFake([], {
+    offset: 0,
+    total: 0,
+    hits: []
+  })
+}, function(pebble) {
+  pebble.emit("appmessage", {
+    payload: {
+      MessageType: "dictation_lookup",
+      Payload: "24|phrase with no hits"
+    }
+  });
+  assert.deepStrictEqual(pebble.sent[0], {
+    0: "search_results",
+    1: "24|0|0|0"
+  });
+});
+
+withPkjs({
+  bible: searchBibleFake([], {
+    offset: 0,
+    total: 12,
+    hits: [0, 1, 2, 3, 4].map(function(index) {
+      return {
+        bookIndex: index,
+        chapter: 1,
+        verse: 1,
+        excerpt: new Array(40).join("long excerpt ")
+      };
+    })
+  })
+}, function(pebble) {
+  var payload;
+
+  pebble.emit("appmessage", {
+    payload: {
+      MessageType: "dictation_lookup",
+      Payload: "25|long result payload"
+    }
+  });
+  payload = pebble.sent[0][1];
+  assert.strictEqual(payload.split("|")[3], "5");
+  assert(Buffer.byteLength(payload, "utf8") <= 520, "search result payload should fit AppMessage");
 });
 
 var dictationCalls = [];

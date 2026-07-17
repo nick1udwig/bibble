@@ -3,6 +3,7 @@
 var assert = require("assert");
 var helpers = require("./helpers");
 var KJV_SOURCE = require("../src/common/kjv-source");
+var StorageCodec = require("../src/pkjs/storage-codec");
 var freshBible = helpers.freshBible;
 var testBooks = helpers.testBooks;
 var storagePrefix = "bibble." + KJV_SOURCE.storageVersion;
@@ -151,6 +152,10 @@ withLocalStorage(memoryStorage(), function() {
   Bible.loadFromBooks(testBooks());
   assert.strictEqual(storage.values[storagePrefix + ".complete"], KJV_SOURCE.storageVersion);
   assert(storage.values[storagePrefix + ".book.42"], "John should be persisted separately");
+  assert(
+    StorageCodec.isCompressed(storage.values[storagePrefix + ".book.42"]),
+    "persisted books should use the quota-safe compressed encoding"
+  );
 
   withXmlHttpRequest(function UnexpectedRequest() {
     requestCount += 1;
@@ -180,6 +185,26 @@ withLocalStorage(memoryStorage(), function() {
     RestoredBible.getChapterPage(0, chapter, 1, 0);
   }
   assert.strictEqual(RestoredBible.cacheInfo().chapters, 12, "chapter page cache should be bounded");
+});
+
+withLocalStorage(memoryStorage(), function() {
+  var storage = global.localStorage;
+  var legacyBooks = testBooks();
+  var Bible;
+  var page;
+
+  storage.values[storagePrefix + ".complete"] = KJV_SOURCE.storageVersion;
+  storage.values[storagePrefix + ".book.42"] = JSON.stringify(legacyBooks[42].chapters);
+  Bible = freshBible();
+  Bible.ensureLoaded(function(error) {
+    assert.strictEqual(error, null);
+  });
+  page = Bible.getChapterPage(42, 3, 16, 0);
+  assert(page.text.indexOf("16. John 3:16") !== -1);
+  assert(
+    StorageCodec.isCompressed(storage.values[storagePrefix + ".book.42"]),
+    "legacy plaintext books should migrate in place when first read"
+  );
 });
 
 withLocalStorage((function() {

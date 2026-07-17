@@ -3,6 +3,8 @@
 var KJV_META = require("./bible-meta");
 var KJV_SOURCE = require("../common/kjv-source");
 var BibbleSettings = require("../common/settings");
+var SearchIndex = require("./search-index");
+var StorageCodec = require("./storage-codec");
 
 var CHAPTER_PAGE_CACHE_LIMIT = 12;
 var TEXT_BOOK_CACHE_LIMIT = 4;
@@ -10,6 +12,8 @@ var KJV_DOWNLOAD_TIMEOUT_MS = 30000;
 var KJV_STORAGE_VERSION = KJV_SOURCE.storageVersion;
 var KJV_STORAGE_MARKER_KEY = "bibble." + KJV_STORAGE_VERSION + ".complete";
 var KJV_STORAGE_BOOK_KEY_PREFIX = "bibble." + KJV_STORAGE_VERSION + ".book.";
+var SEARCH_RESULT_PAGE_SIZE = 5;
+var SEARCH_EXCERPT_BYTES = 64;
 
 var MANUAL_ALIASES = {
   0: ["gen", "gn", "genesys"],
@@ -146,6 +150,11 @@ var loadStateValue = "idle";
 var loadError = "";
 var loadCallbacks = [];
 var paginationSettings = BibbleSettings.normalizeSettings(null);
+var searchIndex = new SearchIndex({
+  corpusVersion: KJV_STORAGE_VERSION,
+  meta: KJV_META,
+  getStorage: persistentStorage
+});
 
 function books() {
   return KJV_META;
@@ -269,6 +278,14 @@ function storageBookKey(bookIndex) {
   return KJV_STORAGE_BOOK_KEY_PREFIX + String(bookIndex);
 }
 
+function encodeStoredChapters(chapters) {
+  return StorageCodec.compress(JSON.stringify(chapters));
+}
+
+function decodeStoredChapters(value) {
+  return JSON.parse(StorageCodec.decompress(value));
+}
+
 function validateStoredChapters(chapters, bookIndex) {
   var meta = KJV_META[bookIndex];
   var chapterIndex;
@@ -303,6 +320,7 @@ function invalidatePersistentCorpus(storage) {
   textBookCacheKeys = [];
   usingPersistentCorpus = false;
   resetPageCache();
+  searchIndex.invalidate();
   loadStateValue = "error";
   loadError = "Cached KJV data is invalid";
 }
@@ -311,6 +329,7 @@ function loadTextBook(bookIndex) {
   var storage;
   var stored;
   var chapters;
+  var legacyEncoding;
 
   if (kjvBooks && kjvBooks[bookIndex]) {
     touchTextBookCache(bookIndex);
@@ -326,13 +345,22 @@ function loadTextBook(bookIndex) {
   }
   try {
     stored = storage.getItem(storageBookKey(bookIndex));
-    chapters = stored ? JSON.parse(stored) : null;
+    legacyEncoding = stored != null && !StorageCodec.isCompressed(stored);
+    chapters = stored ? decodeStoredChapters(stored) : null;
   } catch (_) {
     chapters = null;
   }
   if (!validateStoredChapters(chapters, bookIndex)) {
     invalidatePersistentCorpus(storage);
     return null;
+  }
+
+  if (legacyEncoding) {
+    try {
+      storage.setItem(storageBookKey(bookIndex), encodeStoredChapters(chapters));
+    } catch (_) {
+      // The validated legacy value remains usable if an in-place migration fails.
+    }
   }
 
   kjvBooks = kjvBooks || [];
@@ -379,7 +407,7 @@ function persistNormalizedBooks(normalized) {
       storage.removeItem(KJV_STORAGE_MARKER_KEY);
     }
     for (index = 0; index < normalized.length; index += 1) {
-      storage.setItem(storageBookKey(index), JSON.stringify(normalized[index].chapters));
+      storage.setItem(storageBookKey(index), encodeStoredChapters(normalized[index].chapters));
       written += 1;
     }
     storage.setItem(KJV_STORAGE_MARKER_KEY, KJV_STORAGE_VERSION);
@@ -431,6 +459,7 @@ function normalizeDownloadedBooks(rawBooks) {
 function loadFromBooks(rawBooks) {
   var normalized = normalizeDownloadedBooks(rawBooks);
 
+  searchIndex.invalidate();
   corpusAvailable = true;
   if (persistNormalizedBooks(normalized)) {
     kjvBooks = [];
@@ -553,6 +582,52 @@ function ensureLoaded(callback) {
 
 function isLoaded() {
   return corpusAvailable;
+}
+
+function searchCorpusSource() {
+  return {
+    getBookChapters: function(bookIndex) {
+      var book = loadTextBook(bookIndex);
+      return book && book.chapters ? book.chapters : null;
+    }
+  };
+}
+
+function ensureSearchReady(callback, progress) {
+  ensureLoaded(function(error) {
+    if (error) {
+      if (callback) {
+        callback(error);
+      }
+      return;
+    }
+    searchIndex.ensureReady(searchCorpusSource(), callback, progress);
+  });
+}
+
+function isSearchReady() {
+  return searchIndex.isReady();
+}
+
+function searchState() {
+  return searchIndex.state();
+}
+
+function lastSearchError() {
+  return searchIndex.lastError();
+}
+
+function search(query, offset, limit) {
+  return searchIndex.search(
+    query,
+    offset,
+    limit || SEARCH_RESULT_PAGE_SIZE,
+    function(bookIndex, chapter, verse) {
+      var verses = getChapterVerses(bookIndex, chapter);
+      return verses && typeof verses[verse - 1] === "string" ? verses[verse - 1] : null;
+    },
+    SEARCH_EXCERPT_BYTES
+  );
 }
 
 function loadState() {
@@ -824,6 +899,12 @@ function parseReference(input) {
     alias = allAliases[index];
     if (normalized === alias.alias || normalized.indexOf(alias.alias + " ") === 0) {
       rest = normalized.slice(alias.alias.length).trim();
+      if (rest && !/^\d+(?:\s|$)/.test(rest)) {
+        if (!firstError) {
+          firstError = "unexpected reference words";
+        }
+        continue;
+      }
       numbers = extractNumbers(rest);
       parsed = resolveNumbers(alias.bookIndex, numbers, explicitVerse);
       if (parsed.ok) {
@@ -1272,7 +1353,12 @@ module.exports = {
   isValidVerse: isValidVerse,
   normalizeReference: normalizeReference,
   ensureLoaded: ensureLoaded,
+  ensureSearchReady: ensureSearchReady,
   isLoaded: isLoaded,
+  isSearchReady: isSearchReady,
+  searchState: searchState,
+  lastSearchError: lastSearchError,
+  search: search,
   loadState: loadState,
   lastLoadError: lastLoadError,
   cacheInfo: cacheInfo,

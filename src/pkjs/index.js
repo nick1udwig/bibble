@@ -13,9 +13,11 @@ var MessageType = Object.freeze({
   pageRequest: "page_request",
   prefetchRequest: "prefetch_request",
   dictationLookup: "dictation_lookup",
+  searchPageRequest: "search_page_request",
   status: "status",
   page: "page",
   prefetchPage: "prefetch_page",
+  searchResults: "search_results",
   settings: "settings",
   navigate: "navigate",
   error: "error"
@@ -24,6 +26,7 @@ var MessageType = Object.freeze({
 var ProtocolByteLimit = Object.freeze({
   payload: 520,
   pageText: 400,
+  searchExcerpt: 64,
   status: 150
 });
 
@@ -35,6 +38,10 @@ var pendingBibleWork = [];
 var sending = false;
 var sendRetryTimer = null;
 var loadingBible = false;
+var loadingSearchIndex = false;
+var lastIndexProgress = -1;
+var activeDictationGeneration = 0;
+var legacyDictationGeneration = 0;
 var currentSettings = BibbleSettings.loadSettings();
 
 function applyBibleSettings() {
@@ -70,6 +77,8 @@ Pebble.addEventListener("appmessage", function(event) {
     handlePrefetchRequest(payload);
   } else if (type === MessageType.dictationLookup) {
     handleDictationLookup(payload);
+  } else if (type === MessageType.searchPageRequest) {
+    handleSearchPageRequest(payload);
   }
 });
 
@@ -160,11 +169,60 @@ function handlePrefetchRequest(payload) {
   });
 }
 
-function handleDictationLookup(text) {
+function nextLegacyDictationGeneration() {
+  legacyDictationGeneration += 1;
+  if (legacyDictationGeneration > 65535) {
+    legacyDictationGeneration = 1;
+  }
+  return legacyDictationGeneration;
+}
+
+function parseDictationRequest(payload) {
+  var text = String(payload == null ? "" : payload);
+  var separator = text.indexOf("|");
+  var generation;
+
+  if (separator > 0) {
+    generation = parsePayloadInteger(text.slice(0, separator));
+    if (generation === generation && generation >= 1 && generation <= 65535) {
+      return {
+        generation: generation,
+        text: text.slice(separator + 1)
+      };
+    }
+  }
+  return {
+    generation: nextLegacyDictationGeneration(),
+    text: text
+  };
+}
+
+function handleDictationLookup(payload) {
+  var request = parseDictationRequest(payload);
+  var text = request.text;
   var parsed = Bible.parseReference(text);
 
+  activeDictationGeneration = request.generation;
   if (!parsed.ok) {
-    sendError("couldn't parse " + sanitizeField(text, 96));
+    if (typeof Bible.search !== "function" || typeof Bible.ensureSearchReady !== "function") {
+      sendError("couldn't parse " + sanitizeField(text, 96));
+      return;
+    }
+    withSearchReady(function() {
+      var results;
+
+      if (request.generation !== activeDictationGeneration) {
+        return;
+      }
+      try {
+        results = Bible.search(text, 0, 5);
+      } catch (error) {
+        log("Bible search failed", error);
+        sendError("Bible search failed");
+        return;
+      }
+      sendSearchResults(results, request.generation);
+    });
     return;
   }
 
@@ -180,6 +238,40 @@ function handleDictationLookup(text) {
   }
 }
 
+function handleSearchPageRequest(payload) {
+  var fields = splitPayload(payload || "");
+  var generation = parsePayloadInteger(fields[0]);
+  var offset = parsePayloadInteger(fields[1]);
+  var query = fields.slice(2).join("|").trim();
+
+  if (generation !== generation || generation < 1 || generation > 65535 ||
+      offset !== offset || offset < 0 || !query ||
+      typeof Bible.search !== "function" || typeof Bible.ensureSearchReady !== "function") {
+    sendError("Bad search request");
+    return;
+  }
+  if (activeDictationGeneration && generation !== activeDictationGeneration) {
+    return;
+  }
+  activeDictationGeneration = generation;
+
+  withSearchReady(function() {
+    var results;
+
+    if (generation !== activeDictationGeneration) {
+      return;
+    }
+    try {
+      results = Bible.search(query, offset, 5);
+    } catch (error) {
+      log("Bible search page failed", error);
+      sendError("Bible search failed");
+      return;
+    }
+    sendSearchResults(results, generation);
+  });
+}
+
 function withBibleReady(work) {
   if (Bible.isLoaded()) {
     work();
@@ -190,12 +282,67 @@ function withBibleReady(work) {
   ensureBibleReady();
 }
 
+function reportIndexProgress(percent) {
+  var milestone = Math.floor((parseInt(percent, 10) || 0) / 25) * 25;
+
+  if (milestone >= 100 || milestone === lastIndexProgress) {
+    return;
+  }
+  lastIndexProgress = milestone;
+  sendStatus("Indexing Bible " + String(milestone) + "%");
+}
+
+function ensureBibleIndexReady() {
+  if (typeof Bible.ensureSearchReady !== "function" ||
+      (typeof Bible.isSearchReady === "function" && Bible.isSearchReady()) ||
+      loadingSearchIndex) {
+    return;
+  }
+
+  loadingSearchIndex = true;
+  lastIndexProgress = -1;
+  Bible.ensureSearchReady(function(error) {
+    loadingSearchIndex = false;
+    if (error) {
+      log("Bible indexing failed", error);
+      sendStatus("Bible search unavailable");
+      return;
+    }
+    sendStatus("Select a book");
+  }, reportIndexProgress);
+}
+
+function withSearchReady(work) {
+  if (typeof Bible.isSearchReady === "function" && Bible.isSearchReady()) {
+    work();
+    return;
+  }
+  if (typeof Bible.ensureSearchReady !== "function") {
+    sendError("Bible search unavailable");
+    return;
+  }
+
+  Bible.ensureSearchReady(function(error) {
+    if (error) {
+      log("Bible indexing failed", error);
+      sendError("Bible search unavailable");
+      return;
+    }
+    work();
+  }, reportIndexProgress);
+}
+
 function ensureBibleReady() {
-  if (Bible.isLoaded() || loadingBible) {
+  if (Bible.isLoaded()) {
+    ensureBibleIndexReady();
+    return;
+  }
+  if (loadingBible) {
     return;
   }
 
   loadingBible = true;
+  sendStatus("Downloading Bible");
   Bible.ensureLoaded(function(error) {
     var work;
 
@@ -207,11 +354,30 @@ function ensureBibleReady() {
       return;
     }
 
+    ensureBibleIndexReady();
     while (pendingBibleWork.length) {
       work = pendingBibleWork.shift();
       work();
     }
   });
+}
+
+function sendSearchResults(results, generation) {
+  var fields = [
+    generation,
+    results.offset || 0,
+    results.total || 0,
+    results.hits ? results.hits.length : 0
+  ];
+
+  (results.hits || []).slice(0, 5).forEach(function(hit) {
+    fields.push(hit.bookIndex);
+    fields.push(hit.chapter);
+    fields.push(hit.verse);
+    fields.push(sanitizeField(hit.excerpt, ProtocolByteLimit.searchExcerpt));
+  });
+
+  sendEnvelope(MessageType.searchResults, truncateUtf8(fields.join("|"), ProtocolByteLimit.payload));
 }
 
 function sendPage(page, generation) {
@@ -268,7 +434,8 @@ function sendEnvelope(type, payload) {
 
 function isRequiredMessage(type) {
   return type === MessageType.page || type === MessageType.settings ||
-    type === MessageType.navigate || type === MessageType.error;
+    type === MessageType.navigate || type === MessageType.searchResults ||
+    type === MessageType.error;
 }
 
 function enqueueMessage(message, type) {
@@ -329,8 +496,9 @@ function flushSendQueue() {
       entry.attempts += 1;
       sendQueue.unshift(entry);
       scheduleSendRetry();
-    } else if (entry.type === MessageType.page || entry.type === MessageType.navigate) {
-      sendError("Page delivery failed");
+    } else if (entry.type === MessageType.page || entry.type === MessageType.navigate ||
+               entry.type === MessageType.searchResults) {
+      sendError(entry.type === MessageType.searchResults ? "Search delivery failed" : "Page delivery failed");
     } else {
       flushSendQueue();
     }
