@@ -29,8 +29,8 @@ This builds `build/bibble.pbw` and installs it to the paired phone with `pebble 
 
 ## App Description
 
-The companion settings page at <https://nick1udwig.github.io/bibble/config/> lets the reader and headers use Gothic 14, 18, or 24 in regular or bold, defaulting to 18 Bold.
-Selection grids stay at Gothic 24 Bold for consistent legibility.
+The companion settings page at <https://nick1udwig.github.io/bibble/config/> lets the reader use Gothic 14, 18, or 24 in regular or bold, defaulting to 18 Bold.
+Rectangular headers follow the reader profile; round headers use compact Gothic 14 Bold so the time and full reference remain inside the display. Selection grids stay at Gothic 24 Bold for consistent legibility.
 Chapters are paginated lazily for the selected reader profile; changing it never rebuilds or redownloads the KJV corpus.
 
 The native watch app is C.

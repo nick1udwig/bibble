@@ -18,8 +18,11 @@
 #define BIBBLE_SEARCH_ROW_HEIGHT 40
 #define BIBBLE_GRID_COLUMNS 3
 #define BIBBLE_GRID_CELL_HEIGHT 38
+// Five complete grid rows fit between the stacked round header and the lower curve.
 #define BIBBLE_ROUND_GRID_SIDE_INSET 30
-#define BIBBLE_ROUND_GRID_BOTTOM_GAP 4
+#define BIBBLE_ROUND_GRID_BOTTOM_GAP 32
+#define BIBBLE_ROUND_SEARCH_SIDE_INSET 40
+#define BIBBLE_ROUND_SEARCH_VISIBLE_ROWS 4
 #define BIBBLE_TOUCH_TAP_MAX_PX 15
 #define BIBBLE_TOUCH_SWIPE_MIN_PX 40
 #define BIBBLE_HEADER_HEIGHT_14 18
@@ -30,15 +33,10 @@
 #define BIBBLE_HEADER_TIME_WIDTH_24 68
 #define BIBBLE_READER_TEXT_PADDING 4
 #define BIBBLE_READER_TEXT_MEASURE_HEIGHT 24000
-#define BIBBLE_ROUND_READER_SIDE_INSET 30
-#define BIBBLE_ROUND_READER_TOP_INSET 30
-#define BIBBLE_ROUND_READER_BOTTOM_GAP 10
-#define BIBBLE_ROUND_HEADER_HEIGHT_14 24
-#define BIBBLE_ROUND_HEADER_HEIGHT_18 28
-#define BIBBLE_ROUND_HEADER_HEIGHT_24 34
-#define BIBBLE_ROUND_HEADER_SIDE_INSET_14 76
-#define BIBBLE_ROUND_HEADER_SIDE_INSET_18 70
-#define BIBBLE_ROUND_HEADER_SIDE_INSET_24 60
+#define BIBBLE_ROUND_HEADER_HEIGHT 38
+#define BIBBLE_ROUND_HEADER_LINE_HEIGHT 18
+#define BIBBLE_ROUND_HEADER_LABEL_Y 18
+#define BIBBLE_ROUND_TEXT_FLOW_INSET 4
 #define BIBBLE_PAGE_CACHE_SIZE 8
 #define BIBBLE_PREFETCH_STEP_COUNT 6
 #define BIBBLE_OUTBOX_QUEUE_SIZE 8
@@ -228,13 +226,7 @@ static int16_t prv_grid_cell_height(void) {
 
 static int16_t prv_header_height(void) {
 #if defined(PBL_ROUND)
-  if (s_font_size == 24) {
-    return BIBBLE_ROUND_HEADER_HEIGHT_24;
-  }
-  if (s_font_size == 18) {
-    return BIBBLE_ROUND_HEADER_HEIGHT_18;
-  }
-  return BIBBLE_ROUND_HEADER_HEIGHT_14;
+  return BIBBLE_ROUND_HEADER_HEIGHT;
 #else
   if (s_font_size == 24) {
     return BIBBLE_HEADER_HEIGHT_24;
@@ -247,6 +239,9 @@ static int16_t prv_header_height(void) {
 }
 
 static int16_t prv_header_text_height(void) {
+#if defined(PBL_ROUND)
+  return BIBBLE_ROUND_HEADER_LINE_HEIGHT;
+#else
   if (s_font_size == 24) {
     return BIBBLE_HEADER_HEIGHT_24;
   }
@@ -254,8 +249,10 @@ static int16_t prv_header_text_height(void) {
     return BIBBLE_HEADER_HEIGHT_18;
   }
   return BIBBLE_HEADER_HEIGHT_14;
+#endif
 }
 
+#if !defined(PBL_ROUND)
 static int16_t prv_header_time_width(void) {
   if (s_font_size == 24) {
     return BIBBLE_HEADER_TIME_WIDTH_24;
@@ -264,17 +261,6 @@ static int16_t prv_header_time_width(void) {
     return BIBBLE_HEADER_TIME_WIDTH_18;
   }
   return BIBBLE_HEADER_TIME_WIDTH_14;
-}
-
-#if defined(PBL_ROUND)
-static int16_t prv_round_header_side_inset(void) {
-  if (s_font_size == 24) {
-    return BIBBLE_ROUND_HEADER_SIDE_INSET_24;
-  }
-  if (s_font_size == 18) {
-    return BIBBLE_ROUND_HEADER_SIDE_INSET_18;
-  }
-  return BIBBLE_ROUND_HEADER_SIDE_INSET_14;
 }
 #endif
 
@@ -289,7 +275,12 @@ static GFont prv_selected_font(void) {
 }
 
 static GFont prv_header_font(void) {
+#if defined(PBL_ROUND)
+  // A fixed compact face leaves enough width for full references in the narrow top chord.
+  return fonts_get_system_font(FONT_KEY_GOTHIC_14_BOLD);
+#else
   return prv_selected_font();
+#endif
 }
 
 static GFont prv_reader_font(void) {
@@ -321,9 +312,9 @@ static void prv_copy_string(char *dest, size_t dest_size, const char *src) {
 
 static GRect prv_grid_frame_for_bounds(GRect bounds) {
 #if defined(PBL_ROUND)
-  return GRect(BIBBLE_ROUND_GRID_SIDE_INSET, BIBBLE_ROUND_READER_TOP_INSET,
+  return GRect(BIBBLE_ROUND_GRID_SIDE_INSET, prv_header_height(),
                bounds.size.w - (BIBBLE_ROUND_GRID_SIDE_INSET * 2),
-               bounds.size.h - BIBBLE_ROUND_READER_TOP_INSET - BIBBLE_ROUND_GRID_BOTTOM_GAP);
+               bounds.size.h - prv_header_height() - BIBBLE_ROUND_GRID_BOTTOM_GAP);
 #else
   int16_t header_height = prv_header_height();
   return GRect(0, header_height, bounds.size.w, bounds.size.h - header_height);
@@ -332,9 +323,8 @@ static GRect prv_grid_frame_for_bounds(GRect bounds) {
 
 static GRect prv_reader_body_frame_for_bounds(GRect bounds) {
 #if defined(PBL_ROUND)
-  return GRect(BIBBLE_ROUND_READER_SIDE_INSET, BIBBLE_ROUND_READER_TOP_INSET,
-               bounds.size.w - (BIBBLE_ROUND_READER_SIDE_INSET * 2),
-               bounds.size.h - BIBBLE_ROUND_READER_TOP_INSET - BIBBLE_ROUND_READER_BOTTOM_GAP);
+  return GRect(0, prv_header_height(), bounds.size.w,
+               bounds.size.h - prv_header_height());
 #else
   int16_t header_height = prv_header_height();
   return GRect(4, header_height + 4, bounds.size.w - 8,
@@ -343,7 +333,13 @@ static GRect prv_reader_body_frame_for_bounds(GRect bounds) {
 }
 
 static GRect prv_search_frame_for_bounds(GRect bounds) {
+#if defined(PBL_ROUND)
+  return GRect(BIBBLE_ROUND_SEARCH_SIDE_INSET, prv_header_height(),
+               bounds.size.w - (BIBBLE_ROUND_SEARCH_SIDE_INSET * 2),
+               BIBBLE_ROUND_SEARCH_VISIBLE_ROWS * BIBBLE_SEARCH_ROW_HEIGHT);
+#else
   return prv_grid_frame_for_bounds(bounds);
+#endif
 }
 
 static void prv_copy_payload_field(char *dest, size_t dest_size, const char *src) {
@@ -428,17 +424,12 @@ static void prv_header_frames_for_bounds(GRect bounds, GRect *header_frame, GRec
                                          GRect *time_frame) {
   int16_t header_height = prv_header_height();
   int16_t text_height = prv_header_text_height();
-  int16_t time_width = prv_header_time_width();
 #if defined(PBL_ROUND)
-  int16_t text_y = (header_height - text_height) / 2 + 1;
-  int16_t side_inset = prv_round_header_side_inset();
   *header_frame = GRect(0, 0, bounds.size.w, header_height);
-  *label_frame = GRect(side_inset, text_y,
-                       bounds.size.w - (side_inset * 2) - time_width,
-                       text_height);
-  *time_frame = GRect(bounds.size.w - side_inset - time_width,
-                      text_y, time_width, text_height);
+  *label_frame = GRect(0, BIBBLE_ROUND_HEADER_LABEL_Y, bounds.size.w, text_height);
+  *time_frame = GRect(0, 0, bounds.size.w, text_height);
 #else
+  int16_t time_width = prv_header_time_width();
   *header_frame = GRect(0, 0, bounds.size.w, header_height);
   *label_frame = GRect(4, 0, bounds.size.w - time_width - 8, text_height);
   *time_frame = GRect(bounds.size.w - time_width - 4, 0, time_width, text_height);
@@ -461,6 +452,9 @@ static void prv_create_header(Layer *root, GRect bounds, Layer **header_out, Tex
   text_layer_set_overflow_mode(*label_out, GTextOverflowModeTrailingEllipsis);
   text_layer_set_background_color(*label_out, GColorClear);
   text_layer_set_text_color(*label_out, GColorBlack);
+#if defined(PBL_ROUND)
+  text_layer_set_text_alignment(*label_out, GTextAlignmentCenter);
+#endif
   layer_add_child(*header_out, text_layer_get_layer(*label_out));
 
   *time_out = text_layer_create(time_frame);
@@ -468,8 +462,17 @@ static void prv_create_header(Layer *root, GRect bounds, Layer **header_out, Tex
   text_layer_set_overflow_mode(*time_out, GTextOverflowModeFill);
   text_layer_set_background_color(*time_out, GColorClear);
   text_layer_set_text_color(*time_out, GColorBlack);
+#if defined(PBL_ROUND)
+  text_layer_set_text_alignment(*time_out, GTextAlignmentCenter);
+#else
   text_layer_set_text_alignment(*time_out, GTextAlignmentRight);
+#endif
   layer_add_child(*header_out, text_layer_get_layer(*time_out));
+
+#if defined(PBL_ROUND)
+  text_layer_enable_screen_text_flow_and_paging(*label_out, BIBBLE_ROUND_TEXT_FLOW_INSET);
+  text_layer_enable_screen_text_flow_and_paging(*time_out, BIBBLE_ROUND_TEXT_FLOW_INSET);
+#endif
 }
 
 static void prv_relayout_header(Window *window, Layer *header, TextLayer *label, TextLayer *time_layer) {
@@ -2034,6 +2037,11 @@ static bool prv_replace_reader_body_layer(GSize size) {
   text_layer_set_overflow_mode(new_layer, GTextOverflowModeWordWrap);
   text_layer_set_background_color(new_layer, GColorClear);
   scroll_layer_add_child(s_reader_scroll_layer, text_layer_get_layer(new_layer));
+#if defined(PBL_ROUND)
+  // Pebble's flow layout varies each line's inset with the circular perimeter and
+  // adds safe page breaks when the text is scrolled.
+  text_layer_enable_screen_text_flow_and_paging(new_layer, BIBBLE_ROUND_TEXT_FLOW_INSET);
+#endif
   s_reader_body_layer = new_layer;
 
   if (old_layer) {
@@ -2111,6 +2119,7 @@ static void prv_relayout_for_font_profile(void) {
   bounds = layer_get_bounds(window_get_root_layer(s_reader_window));
   body_frame = prv_reader_body_frame_for_bounds(bounds);
   layer_set_frame(scroll_layer_get_layer(s_reader_scroll_layer), body_frame);
+  scroll_layer_set_content_offset(s_reader_scroll_layer, GPointZero, false);
   prv_replace_reader_body_layer(body_frame.size);
   prv_update_reader_layers(true);
 }

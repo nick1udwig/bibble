@@ -1,7 +1,7 @@
 {
   "name": "bibble",
   "author": "nick1udwig",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Read the King James Bible on Repebble core devices.",
   "keywords": [
     "pebble-app",
