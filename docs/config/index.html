@@ -75,6 +75,11 @@
           <div class="preview-frame">
             <canvas id="watch-preview" width="200" height="228" role="img" aria-label="Scripture preview with the selected watch font">John 3 — 16. For God so loved the world, that he gave his only begotten Son.</canvas>
           </div>
+          <div class="preview-navigation">
+            <button id="preview-previous" type="button">Previous</button>
+            <span id="preview-page" aria-live="polite"></span>
+            <button id="preview-next" type="button">Next</button>
+          </div>
         </section>
 
         <button class="primary" type="submit">Save &amp; close</button>
@@ -84,6 +89,8 @@
 
     <script src="./settings.js"></script>
     <script src="./preview-fonts.js"></script>
+    <script src="./font-metrics.js"></script>
+    <script src="./reader-layout.js"></script>
     <script src="./preview.js"></script>
     <script src="./app.js"></script>
   </body>

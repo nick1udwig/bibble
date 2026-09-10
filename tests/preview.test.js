@@ -3,8 +3,9 @@ var assert = require("assert");
 var fs = require("fs");
 var vm = require("vm");
 var path = require("path");
-var context = { window: {} };
-["preview-fonts.js", "preview.js"].forEach(function(file) {
+var context = {};
+context.window = context;
+["preview-fonts.js", "font-metrics.js", "reader-layout.js", "preview.js"].forEach(function(file) {
   vm.runInNewContext(fs.readFileSync(path.join(__dirname, "../src/config", file), "utf8"), context);
 });
 function render(size, bold, platform) {

@@ -8,8 +8,8 @@
 #include "message_keys.auto.h"
 
 #define BIBBLE_STATUS_LENGTH 160
-#define BIBBLE_READER_TEXT_LENGTH 512
-#define BIBBLE_PAYLOAD_LENGTH 600
+#define BIBBLE_READER_TEXT_LENGTH 2048
+#define BIBBLE_PAYLOAD_LENGTH 2200
 #define BIBBLE_DICTATION_LENGTH 128
 #define BIBBLE_REF_LENGTH 80
 #define BIBBLE_SEARCH_EXCERPT_LENGTH 68
@@ -90,7 +90,7 @@ static TextLayer *s_verse_status_layer;
 static TextLayer *s_book_time_layer;
 static TextLayer *s_chapter_time_layer;
 static TextLayer *s_verse_time_layer;
-static TextLayer *s_reader_body_layer;
+static Layer *s_reader_body_layer;
 static TextLayer *s_reader_reference_layer;
 static TextLayer *s_reader_time_layer;
 static TextLayer *s_search_status_layer;
@@ -338,7 +338,7 @@ static GRect prv_grid_frame_for_bounds(GRect bounds) {
 static GRect prv_reader_body_frame_for_bounds(GRect bounds) {
 #if defined(PBL_ROUND)
   return GRect(0, prv_header_height(), bounds.size.w,
-               bounds.size.h - prv_header_height());
+               bounds.size.h - prv_header_height() - 4);
 #else
   int16_t header_height = prv_header_height();
   return GRect(4, header_height + 4, bounds.size.w - 8,
@@ -1995,72 +1995,60 @@ static void prv_show_verse_window(uint8_t book, uint8_t chapter, uint8_t verse) 
   }
 }
 
+// Lines arrive pre-paginated using the same bitmap metrics and screen geometry
+// as this renderer. Draw each line explicitly so the SDK cannot reflow a page.
+static void prv_reader_body_update(Layer *layer, GContext *ctx) {
+  GRect bounds = layer_get_bounds(layer);
+  const char *cursor = s_reader_text;
+  int16_t y = 0;
+  int16_t bottom = s_font_size == 14 ? 16 : s_font_size == 18 ? 21 : s_font_size + 4;
+  graphics_context_set_text_color(ctx, GColorBlack);
+  while (*cursor && y + bottom <= bounds.size.h) {
+    char line[128];
+    const char *end = strchr(cursor, '\n');
+    size_t length = end ? (size_t)(end - cursor) : strlen(cursor);
+    if (length >= sizeof(line)) length = sizeof(line) - 1;
+    memcpy(line, cursor, length);
+    line[length] = '\0';
+    int16_t inset = 0;
+#if defined(PBL_ROUND)
+    int16_t radius = bounds.size.w / 2;
+    int16_t top = s_font_size == 14 ? (s_bold_text ? 3 : 4) :
+                  s_font_size == 18 ? 6 : s_font_size == 28 && s_bold_text ? 7 : 8;
+    int16_t first = abs(prv_header_height() + y + top - radius);
+    int16_t last = abs(prv_header_height() + y + bottom - 1 - radius);
+    int16_t distance = first > last ? first : last;
+    inset = 4;
+    while ((radius - inset + 4) * (radius - inset + 4) + distance * distance > radius * radius) inset++;
+#endif
+    graphics_draw_text(ctx, line, prv_reader_font(),
+                       GRect(inset, y, bounds.size.w - inset * 2, bottom),
+                       GTextOverflowModeWordWrap, GTextAlignmentLeft, NULL);
+    if (!end) break;
+    cursor = end + 1;
+    y += s_font_size;
+  }
+}
+
 static void prv_update_reader_layers(bool reset_scroll) {
-  Layer *body_layer;
-  Layer *scroll_layer;
-  GRect scroll_bounds;
-  GRect body_frame;
-  GSize text_size;
-  int16_t content_height;
-
-  if (!s_reader_scroll_layer || !s_reader_body_layer) {
-    return;
-  }
-
-  text_layer_set_text(s_reader_body_layer, s_reader_text);
-
-  body_layer = text_layer_get_layer(s_reader_body_layer);
-  scroll_layer = scroll_layer_get_layer(s_reader_scroll_layer);
-  scroll_bounds = layer_get_bounds(scroll_layer);
-  body_frame = layer_get_frame(body_layer);
-  body_frame.origin = GPointZero;
-  body_frame.size.w = scroll_bounds.size.w;
-  body_frame.size.h = BIBBLE_READER_TEXT_MEASURE_HEIGHT;
-  layer_set_frame(body_layer, body_frame);
-
-  text_size = text_layer_get_content_size(s_reader_body_layer);
-  content_height = text_size.h + BIBBLE_READER_TEXT_PADDING;
-  if (content_height < scroll_bounds.size.h) {
-    content_height = scroll_bounds.size.h;
-  }
-
-  body_frame.size.h = content_height;
-  layer_set_frame(body_layer, body_frame);
-  scroll_layer_set_content_size(s_reader_scroll_layer, GSize(scroll_bounds.size.w, content_height));
-  if (reset_scroll) {
-    scroll_layer_set_content_offset(s_reader_scroll_layer, GPointZero, false);
-  }
-
+  if (!s_reader_scroll_layer || !s_reader_body_layer) return;
+  GRect bounds = layer_get_bounds(scroll_layer_get_layer(s_reader_scroll_layer));
+  layer_set_frame(s_reader_body_layer, GRect(0, 0, bounds.size.w, bounds.size.h));
+  scroll_layer_set_content_size(s_reader_scroll_layer, bounds.size);
+  scroll_layer_set_content_offset(s_reader_scroll_layer, GPointZero, false);
+  layer_mark_dirty(s_reader_body_layer);
   prv_restore_reader_header();
 }
 
 static bool prv_replace_reader_body_layer(GSize size) {
-  TextLayer *old_layer = s_reader_body_layer;
-  TextLayer *new_layer;
-
-  if (!s_reader_scroll_layer) {
-    return false;
-  }
-
-  new_layer = text_layer_create(GRect(0, 0, size.w, size.h));
-  if (!new_layer) {
-    return false;
-  }
-
-  text_layer_set_font(new_layer, prv_reader_font());
-  text_layer_set_overflow_mode(new_layer, GTextOverflowModeWordWrap);
-  text_layer_set_background_color(new_layer, GColorClear);
-  scroll_layer_add_child(s_reader_scroll_layer, text_layer_get_layer(new_layer));
-#if defined(PBL_ROUND)
-  // Pebble's flow layout varies each line's inset with the circular perimeter and
-  // adds safe page breaks when the text is scrolled.
-  text_layer_enable_screen_text_flow_and_paging(new_layer, BIBBLE_ROUND_TEXT_FLOW_INSET);
-#endif
+  Layer *old_layer = s_reader_body_layer;
+  if (!s_reader_scroll_layer) return false;
+  Layer *new_layer = layer_create(GRect(0, 0, size.w, size.h));
+  if (!new_layer) return false;
+  layer_set_update_proc(new_layer, prv_reader_body_update);
+  scroll_layer_add_child(s_reader_scroll_layer, new_layer);
   s_reader_body_layer = new_layer;
-
-  if (old_layer) {
-    text_layer_destroy(old_layer);
-  }
+  if (old_layer) layer_destroy(old_layer);
   return true;
 }
 
@@ -2220,7 +2208,7 @@ static void prv_reader_window_unload(Window *window) {
   s_prefetch_generation += 1;
   s_prefetch_in_flight = false;
   prv_cancel_page_request();
-  text_layer_destroy(s_reader_body_layer);
+  layer_destroy(s_reader_body_layer);
   scroll_layer_destroy(s_reader_scroll_layer);
   prv_destroy_header(&s_reader_header_layer, &s_reader_reference_layer, &s_reader_time_layer);
   s_reader_body_layer = NULL;
@@ -2278,69 +2266,10 @@ static void prv_show_reader_window(uint8_t book, uint8_t chapter, uint8_t verse,
   }
 }
 
-static int prv_clamp_reader_offset(int offset_y) {
-  Layer *scroll_layer;
-  GRect bounds;
-  GSize content_size;
-  int min_y;
-
-  if (!s_reader_scroll_layer) {
-    return offset_y;
-  }
-
-  scroll_layer = scroll_layer_get_layer(s_reader_scroll_layer);
-  bounds = layer_get_bounds(scroll_layer);
-  content_size = scroll_layer_get_content_size(s_reader_scroll_layer);
-  min_y = bounds.size.h - content_size.h;
-  if (min_y > 0) {
-    min_y = 0;
-  }
-  if (offset_y > 0) {
-    return 0;
-  }
-  if (offset_y < min_y) {
-    return min_y;
-  }
-  return offset_y;
-}
-
 static void prv_scroll_reader_by(int dy) {
-  Layer *scroll_layer;
-  GRect bounds;
-  GSize content_size;
-  GPoint offset;
-  int min_y;
-  int next_y;
-
-  if (!s_reader_scroll_layer || s_reader_loading) {
-    return;
-  }
-
-  scroll_layer = scroll_layer_get_layer(s_reader_scroll_layer);
-  bounds = layer_get_bounds(scroll_layer);
-  content_size = scroll_layer_get_content_size(s_reader_scroll_layer);
-  min_y = bounds.size.h - content_size.h;
-  if (min_y > 0) {
-    min_y = 0;
-  }
-
-  offset = scroll_layer_get_content_offset(s_reader_scroll_layer);
-  next_y = offset.y + dy;
-  if (next_y > 0) {
-    next_y = 0;
-    if (dy > 0) {
-      prv_request_previous_page();
-      return;
-    }
-  } else if (next_y < min_y) {
-    next_y = min_y;
-    if (dy < 0) {
-      prv_request_next_page();
-      return;
-    }
-  }
-
-  scroll_layer_set_content_offset(s_reader_scroll_layer, GPoint(0, prv_clamp_reader_offset(next_y)), false);
+  if (s_reader_loading || !dy) return;
+  if (dy > 0) prv_request_previous_page();
+  else prv_request_next_page();
 }
 
 static void prv_reader_up_handler(ClickRecognizerRef recognizer, void *context) {
@@ -2977,10 +2906,8 @@ static void prv_touch_handler(const TouchEvent *event, void *context) {
         s_touch_dragged = true;
       }
       if (reader_active) {
-        dy = event->y - s_touch_last_y;
-        if (dy != 0) {
-          prv_scroll_reader_by(dy);
-        }
+        // A completed swipe advances one screen; movement updates must not
+        // consume multiple cached pages during the same gesture.
       } else if (search_active) {
         dy = event->y - s_touch_last_y;
         if (dy != 0) {
@@ -3006,7 +2933,7 @@ static void prv_touch_handler(const TouchEvent *event, void *context) {
       if (reader_active) {
         if (prv_iabs(dx) > BIBBLE_TOUCH_SWIPE_MIN_PX && prv_iabs(dx) > prv_iabs(dy) && dx > 0) {
           window_stack_pop(true);
-        } else if (!s_touch_dragged && prv_iabs(dy) > BIBBLE_TOUCH_SWIPE_MIN_PX) {
+        } else if (prv_iabs(dy) > BIBBLE_TOUCH_SWIPE_MIN_PX && prv_iabs(dy) > prv_iabs(dx)) {
           prv_scroll_reader_by(dy);
         }
         break;
@@ -3057,7 +2984,7 @@ static void prv_init(void) {
   app_message_register_inbox_dropped(prv_inbox_dropped);
   app_message_register_outbox_sent(prv_outbox_sent);
   app_message_register_outbox_failed(prv_outbox_failed);
-  app_message_open(640, 256);
+  app_message_open(2240, 256);
   tick_timer_service_subscribe(MINUTE_UNIT, prv_minute_tick_handler);
 
 #if defined(PBL_MICROPHONE)

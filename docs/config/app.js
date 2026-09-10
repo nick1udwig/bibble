@@ -28,6 +28,18 @@
     });
   }
 
+  var previewPage = 0;
+  var previous = document.getElementById("preview-previous");
+  var next = document.getElementById("preview-next");
+  function renderPreview(settings) {
+    var count = window.BibblePreview.draw(preview, settings, watch.value, previewPage);
+    previous.disabled = previewPage === 0;
+    next.disabled = previewPage >= count - 1;
+    document.getElementById("preview-page").textContent = (previewPage + 1) + " / " + count;
+  }
+  previous.addEventListener("click", function() { previewPage -= 1; renderPreview(selectedSettings()); });
+  next.addEventListener("click", function() { previewPage += 1; renderPreview(selectedSettings()); });
+
   function render(settings) {
     var normalized = Settings.normalizeSettings(settings);
     var sizeInput = document.querySelector(
@@ -45,7 +57,8 @@
     }
     preview.setAttribute("data-font-size", normalized.fontSize);
     preview.setAttribute("data-bold", normalized.bold ? "true" : "false");
-    window.BibblePreview.draw(preview, normalized, watch.value);
+    previewPage = 0;
+    renderPreview(normalized);
   }
 
   function closeWith(settings) {

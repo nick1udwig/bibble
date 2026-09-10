@@ -3,6 +3,13 @@
 var KJV_META = require("./bible-meta");
 var KJV_SOURCE = require("../common/kjv-source");
 var BibbleSettings = require("../common/settings");
+var ReaderLayout = require("../common/reader-layout");
+var readerPlatform = "emery";
+
+function setPlatform(platform) {
+  readerPlatform = platform === "gabbro" ? "gabbro" : "emery";
+}
+
 var SearchIndex = require("./search-index");
 var StorageCodec = require("./storage-codec");
 
@@ -1196,129 +1203,14 @@ function getAdjacentPage(bookIndex, chapter, page, delta) {
 }
 
 function getChapterCache(bookIndex, chapter) {
-  var pageCharLimit = BibbleSettings.pageCharLimit(paginationSettings);
-  var key = fontProfile() + ":" + String(bookIndex) + ":" + String(chapter);
-  var verses;
-  var pages = [];
-  var pageFirstVerse = [];
-  var versePage = [];
-  var current = "";
-  var index;
-
+  var key = readerPlatform + ":" + fontProfile() + ":" + bookIndex + ":" + chapter;
   if (pageCache[key]) {
     touchPageCache(key);
     return pageCache[key];
   }
-
-  verses = getChapterVerses(bookIndex, chapter);
-  if (!verses) {
-    return storePageCache(key, {
-      pages: [""],
-      pageFirstVerse: [1, 1],
-      versePage: [0, 1]
-    });
-  }
-
-  for (index = 0; index < verses.length; index += 1) {
-    current = appendVerseLine(pages, pageFirstVerse, versePage, current, index + 1,
-                              String(index + 1) + ". " + verses[index], pageCharLimit);
-  }
-  if (current) {
-    if (!pageFirstVerse[pages.length + 1]) {
-      pageFirstVerse[pages.length + 1] = 1;
-    }
-    pages.push(current);
-  }
-  if (!pages.length) {
-    pages.push("");
-    pageFirstVerse[1] = 1;
-  }
-
-  return storePageCache(key, {
-    pages: pages,
-    pageFirstVerse: pageFirstVerse,
-    versePage: versePage
-  });
-}
-
-function appendVerseLine(pages, pageFirstVerse, versePage, current, verse, line, pageCharLimit) {
-  var chunks;
-  var chunkIndex;
-  var candidate;
-
-  if (line.length > pageCharLimit) {
-    if (current) {
-      pages.push(current);
-      current = "";
-    }
-    chunks = splitLongLine(line, pageCharLimit);
-    for (chunkIndex = 0; chunkIndex < chunks.length; chunkIndex += 1) {
-      versePage[verse] = versePage[verse] || pages.length + 1;
-      pageFirstVerse[pages.length + 1] = verse;
-      if (chunkIndex + 1 === chunks.length) {
-        current = chunks[chunkIndex];
-      } else {
-        pages.push(chunks[chunkIndex]);
-      }
-    }
-    return current;
-  }
-
-  candidate = current ? current + "\n" + line : line;
-  if (current && candidate.length > pageCharLimit) {
-    pages.push(current);
-    current = line;
-  } else {
-    current = candidate;
-  }
-
-  versePage[verse] = versePage[verse] || pages.length + 1;
-  pageFirstVerse[pages.length + 1] = pageFirstVerse[pages.length + 1] || verse;
-  return current;
-}
-
-function splitLongLine(line, maxLength) {
-  var words = String(line).split(/\s+/);
-  var chunks = [];
-  var current = "";
-  var index;
-  var candidate;
-  var word;
-  var room;
-
-  for (index = 0; index < words.length; index += 1) {
-    word = words[index];
-    if (word.length > maxLength) {
-      if (current) {
-        room = maxLength - current.length - 1;
-        if (room > 0) {
-          chunks.push(current + " " + word.slice(0, room));
-          word = word.slice(room);
-        } else {
-          chunks.push(current);
-        }
-        current = "";
-      }
-      while (word.length > maxLength) {
-        chunks.push(word.slice(0, maxLength));
-        word = word.slice(maxLength);
-      }
-      current = word;
-      continue;
-    }
-
-    candidate = current ? current + " " + word : word;
-    if (current && candidate.length > maxLength) {
-      chunks.push(current);
-      current = word;
-    } else {
-      current = candidate;
-    }
-  }
-  if (current) {
-    chunks.push(current);
-  }
-  return chunks;
+  return storePageCache(key, ReaderLayout.paginate(
+    getChapterVerses(bookIndex, chapter) || [], paginationSettings, readerPlatform
+  ));
 }
 
 function clampPage(page, pageCount) {
@@ -1363,6 +1255,7 @@ module.exports = {
   lastLoadError: lastLoadError,
   cacheInfo: cacheInfo,
   setSettings: setSettings,
+  setPlatform: setPlatform,
   setFontSize: setFontSize,
   fontSize: fontSize,
   fontBold: fontBold,

@@ -23,7 +23,7 @@
     });
   }
 
-  function draw(canvas, settings, platform) {
+  function draw(canvas, settings, platform, pageIndex) {
     var round = platform === "gabbro";
     var w = round ? 260 : 200;
     var h = round ? 260 : 228;
@@ -45,23 +45,13 @@
     ctx.fillStyle = "black";
     text(ctx, headerFont, "John 3", round ? Math.floor((w - width(headerFont, "John 3")) / 2) : 4, round ? 18 : 0);
     text(ctx, headerFont, "10:09", round ? Math.floor((w - width(headerFont, "10:09")) / 2) : w - 4 - width(headerFont, "10:09"), 0);
-    var words = sample.split(" ");
-    var y = headerHeight + (round ? 0 : 4);
-    while (words.length && y + font.height <= h - 4) {
-      var inset = 4;
-      if (round) {
-        // Fit the entire line inside the display's circular perimeter, with
-        // the same four-pixel flow inset used by the watch reader.
-        var distance = Math.max(Math.abs(y - h / 2), Math.abs(y + font.height - h / 2));
-        inset += Math.ceil(w / 2 - Math.sqrt(Math.max(0, w * w / 4 - distance * distance)));
-      }
-      var line = words.shift();
-      while (words.length && width(font, line + " " + words[0]) <= w - inset * 2) {
-        line += " " + words.shift();
-      }
-      text(ctx, font, line, inset, y);
-      y += font.height;
-    }
+    var layout = root.BibbleReaderLayout;
+    var geo = layout.geometry(settings, platform);
+    var pages = layout.paginate([sample.replace(/^16\. /, "")], settings, platform, 16);
+    pages.pages[Math.min(pageIndex || 0, pages.pages.length - 1)].split("\n").forEach(function(line, index) {
+      text(ctx, font, line, geo.rows[index].x, geo.rows[index].y);
+    });
+    return pages.pages.length;
   }
 
   root.BibblePreview = { draw: draw };

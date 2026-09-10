@@ -45,6 +45,10 @@ var legacyDictationGeneration = 0;
 var currentSettings = BibbleSettings.loadSettings();
 
 function applyBibleSettings() {
+  if (typeof Bible.setPlatform === "function") {
+    var info = typeof Pebble.getActiveWatchInfo === "function" ? Pebble.getActiveWatchInfo() : null;
+    Bible.setPlatform(info && info.platform);
+  }
   if (typeof Bible.setSettings === "function") {
     Bible.setSettings(currentSettings);
   } else if (typeof Bible.setFontSize === "function") {
@@ -59,6 +63,7 @@ function currentFontProfile() {
 applyBibleSettings();
 
 Pebble.addEventListener("ready", function() {
+  applyBibleSettings();
   sendStatus("Select a book");
   ensureBibleReady();
 });

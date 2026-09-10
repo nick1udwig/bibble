@@ -92,6 +92,8 @@ assert.strictEqual(Settings.parseConfigPageResponse("CANCELLED"), null);
 
 [
   ["src/config/index.html", "docs/config/index.html"],
+  ["src/common/reader-layout.js", "docs/config/reader-layout.js"],
+  ["src/common/font-metrics.js", "docs/config/font-metrics.js"],
   ["src/config/preview.js", "docs/config/preview.js"],
   ["src/config/preview-fonts.js", "docs/config/preview-fonts.js"],
   ["src/config/app.js", "docs/config/app.js"],

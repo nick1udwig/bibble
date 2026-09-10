@@ -211,3 +211,8 @@ button:focus-visible,
     border-width: 2px;
   }
 }
+
+.preview-navigation { display: flex; align-items: center; gap: 12px; margin-top: 12px; }
+.preview-navigation button { width: auto; margin: 0; padding: 8px; }
+.preview-navigation span { flex: 1; text-align: center; }
+.preview-navigation button:disabled { opacity: 0.4; cursor: default; }

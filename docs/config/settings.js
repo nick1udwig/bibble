@@ -20,8 +20,8 @@
   var FONT_SIZE_28 = "28";
   var DEFAULT_FONT_SIZE = FONT_SIZE_18;
   var DEFAULT_BOLD = true;
-  // Bold faces are slightly wider, so each of the eight profiles gets its own
-  // conservative page budget. Profile-keyed caching makes subsequent switches cheap.
+  // Legacy budgets retained for callers of pageCharLimit. Reader pagination
+  // now uses actual glyph metrics and screen geometry in reader-layout.js.
   var PAGE_CHAR_LIMITS = {
     "14r": 360,
     "14b": 330,
