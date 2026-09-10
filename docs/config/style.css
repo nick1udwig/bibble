@@ -136,48 +136,31 @@ legend,
   margin-top: 24px;
 }
 
-.watch-preview {
-  width: min(100%, 280px);
-  min-height: 180px;
-  margin: 0 auto;
-  overflow: hidden;
+#preview-watch {
+  display: block;
+  width: 100%;
+  margin: 8px 0 20px;
+  padding: 10px;
+  font: inherit;
+}
+
+.preview-frame {
+  text-align: center;
+}
+
+#watch-preview {
+  box-sizing: content-box;
+  display: inline-block;
+  max-width: calc(100% - 16px);
+  height: auto;
   border: 8px solid var(--ink);
-  border-radius: 18px;
-  background: #ffffff;
-  box-shadow: 0 0 0 2px #ffffff, 0 0 0 3px var(--ink);
+  border-radius: 3px;
+  background: white;
+  image-rendering: pixelated;
 }
 
-.preview-header {
-  display: flex;
-  justify-content: space-between;
-  padding: 2px 6px;
-  border-bottom: 1px solid var(--ink);
-  font-family: "Arial Narrow", Arial, sans-serif;
-  font-size: 14px;
-}
-
-.watch-preview p {
-  margin: 0;
-  padding: 8px;
-  font-family: "Arial Narrow", Arial, sans-serif;
-  font-size: 14px;
-  line-height: 1.1;
-}
-
-.watch-preview[data-font-size="18"] .preview-header,
-.watch-preview[data-font-size="18"] p {
-  font-size: 18px;
-}
-
-.watch-preview[data-font-size="24"] .preview-header,
-.watch-preview[data-font-size="24"] p {
-  font-size: 24px;
-  line-height: 1.05;
-}
-
-.watch-preview[data-bold="true"] .preview-header,
-.watch-preview[data-bold="true"] p {
-  font-weight: 700;
+#watch-preview[data-watch="gabbro"] {
+  border-radius: 50%;
 }
 
 button {

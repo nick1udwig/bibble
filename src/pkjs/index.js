@@ -83,11 +83,13 @@ Pebble.addEventListener("appmessage", function(event) {
 });
 
 Pebble.addEventListener("showConfiguration", function() {
+  var watchInfo = typeof Pebble.getActiveWatchInfo === "function" ? Pebble.getActiveWatchInfo() : null;
+  var platform = watchInfo && watchInfo.platform === "gabbro" ? "gabbro" : "emery";
   Pebble.openURL(BibbleSettings.buildConfigPageUrl(
     BibbleSettings.CONFIG_PAGE_URL,
     currentSettings,
     Date.now()
-  ));
+  ) + "&platform=" + platform);
 });
 
 Pebble.addEventListener("webviewclosed", function(event) {

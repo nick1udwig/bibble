@@ -4,6 +4,9 @@
   var Settings = window.BibbleSettings;
   var form = document.getElementById("settings-form");
   var preview = document.getElementById("watch-preview");
+  var watch = document.getElementById("preview-watch");
+  var platform = /[?&]platform=(emery|gabbro)(?:&|$)/.exec(window.location.search);
+  watch.value = platform ? platform[1] : "emery";
   var status = document.getElementById("status");
   var embedded = Settings.readConfigPageState(window.location.search);
   var current = embedded || Settings.loadSettings(window.localStorage);
@@ -42,6 +45,7 @@
     }
     preview.setAttribute("data-font-size", normalized.fontSize);
     preview.setAttribute("data-bold", normalized.bold ? "true" : "false");
+    window.BibblePreview.draw(preview, normalized, watch.value);
   }
 
   function closeWith(settings) {

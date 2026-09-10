@@ -24,7 +24,9 @@ var profiles = [
   { fontSize: "14", bold: true },
   { fontSize: "18", bold: false },
   { fontSize: "24", bold: false },
-  { fontSize: "24", bold: true }
+  { fontSize: "24", bold: true },
+  { fontSize: "28", bold: false },
+  { fontSize: "28", bold: true }
 ];
 var profileIndex;
 var pageNumber;
@@ -60,14 +62,14 @@ for (profileIndex = 1; profileIndex < profiles.length; profileIndex += 1) {
   }
 }
 
-assert(firstPage.pageCount > defaultPageCount, "24 Bold should split the chapter into more pages");
+assert(firstPage.pageCount > defaultPageCount, "28 Bold should split the chapter into more pages");
 assert.strictEqual(Bible.setSettings(profiles[0]), true);
 assert.strictEqual(
   Bible.getChapterPage(0, 1, 1, 1).pageCount,
   defaultPageCount,
   "switching back should reuse the default 18 Bold pagination profile"
 );
-assert.strictEqual(Bible.cacheInfo().chapters, 6, "switching back should reuse the cached profile");
+assert.strictEqual(Bible.cacheInfo().chapters, profiles.length, "switching back should reuse the cached profile");
 
 page = Bible.getChapterPage(42, 3, 16, 0);
 assert.strictEqual(page.bookName, "John");

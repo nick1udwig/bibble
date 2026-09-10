@@ -45,6 +45,10 @@
               <small>Large</small>
             </span>
           </label>
+          <label class="choice">
+            <input type="radio" name="font-size" value="28" />
+            <span><strong>28</strong><small>Very large</small></span>
+          </label>
         </fieldset>
 
         <fieldset class="setting-group">
@@ -63,12 +67,13 @@
 
         <section class="preview-section" aria-labelledby="preview-title">
           <h2 id="preview-title">Preview</h2>
-          <div id="watch-preview" class="watch-preview" data-font-size="18" data-bold="true">
-            <div class="preview-header">
-              <span>John 3</span>
-              <span>10:09</span>
-            </div>
-            <p>16. For God so loved the world, that he gave his only begotten Son.</p>
+          <label for="preview-watch">Watch</label>
+          <select id="preview-watch">
+            <option value="emery">Pebble Time 2 (rectangular)</option>
+            <option value="gabbro">Pebble Round 2 (round)</option>
+          </select>
+          <div class="preview-frame">
+            <canvas id="watch-preview" width="200" height="228" role="img" aria-label="Scripture preview with the selected watch font">John 3 — 16. For God so loved the world, that he gave his only begotten Son.</canvas>
           </div>
         </section>
 
@@ -78,6 +83,8 @@
     </main>
 
     <script src="./settings.js"></script>
+    <script src="./preview-fonts.js"></script>
+    <script src="./preview.js"></script>
     <script src="./app.js"></script>
   </body>
 </html>

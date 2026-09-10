@@ -28,9 +28,11 @@
 #define BIBBLE_HEADER_HEIGHT_14 18
 #define BIBBLE_HEADER_HEIGHT_18 22
 #define BIBBLE_HEADER_HEIGHT_24 28
+#define BIBBLE_HEADER_HEIGHT_28 32
 #define BIBBLE_HEADER_TIME_WIDTH_14 42
 #define BIBBLE_HEADER_TIME_WIDTH_18 52
 #define BIBBLE_HEADER_TIME_WIDTH_24 68
+#define BIBBLE_HEADER_TIME_WIDTH_28 80
 #define BIBBLE_READER_TEXT_PADDING 4
 #define BIBBLE_READER_TEXT_MEASURE_HEIGHT 24000
 #define BIBBLE_ROUND_HEADER_HEIGHT 38
@@ -228,6 +230,9 @@ static int16_t prv_header_height(void) {
 #if defined(PBL_ROUND)
   return BIBBLE_ROUND_HEADER_HEIGHT;
 #else
+  if (s_font_size == 28) {
+    return BIBBLE_HEADER_HEIGHT_28;
+  }
   if (s_font_size == 24) {
     return BIBBLE_HEADER_HEIGHT_24;
   }
@@ -242,6 +247,9 @@ static int16_t prv_header_text_height(void) {
 #if defined(PBL_ROUND)
   return BIBBLE_ROUND_HEADER_LINE_HEIGHT;
 #else
+  if (s_font_size == 28) {
+    return BIBBLE_HEADER_HEIGHT_28;
+  }
   if (s_font_size == 24) {
     return BIBBLE_HEADER_HEIGHT_24;
   }
@@ -254,6 +262,9 @@ static int16_t prv_header_text_height(void) {
 
 #if !defined(PBL_ROUND)
 static int16_t prv_header_time_width(void) {
+  if (s_font_size == 28) {
+    return BIBBLE_HEADER_TIME_WIDTH_28;
+  }
   if (s_font_size == 24) {
     return BIBBLE_HEADER_TIME_WIDTH_24;
   }
@@ -265,6 +276,9 @@ static int16_t prv_header_time_width(void) {
 #endif
 
 static GFont prv_selected_font(void) {
+  if (s_font_size == 28) {
+    return fonts_get_system_font(s_bold_text ? FONT_KEY_GOTHIC_28_BOLD : FONT_KEY_GOTHIC_28);
+  }
   if (s_font_size == 24) {
     return fonts_get_system_font(s_bold_text ? FONT_KEY_GOTHIC_24_BOLD : FONT_KEY_GOTHIC_24);
   }
@@ -2125,7 +2139,7 @@ static void prv_relayout_for_font_profile(void) {
 }
 
 static bool prv_valid_font_size(uint8_t font_size) {
-  return font_size == 14 || font_size == 18 || font_size == 24;
+  return font_size == 14 || font_size == 18 || font_size == 24 || font_size == 28;
 }
 
 static bool prv_parse_font_profile(const char *value, uint8_t *font_size_out, bool *bold_out) {

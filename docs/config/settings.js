@@ -17,9 +17,10 @@
   var FONT_SIZE_14 = "14";
   var FONT_SIZE_18 = "18";
   var FONT_SIZE_24 = "24";
+  var FONT_SIZE_28 = "28";
   var DEFAULT_FONT_SIZE = FONT_SIZE_18;
   var DEFAULT_BOLD = true;
-  // Bold faces are slightly wider, so each of the six profiles gets its own
+  // Bold faces are slightly wider, so each of the eight profiles gets its own
   // conservative page budget. Profile-keyed caching makes subsequent switches cheap.
   var PAGE_CHAR_LIMITS = {
     "14r": 360,
@@ -27,10 +28,15 @@
     "18r": 220,
     "18b": 200,
     "24r": 150,
-    "24b": 135
+    "24b": 135,
+    "28r": 110,
+    "28b": 100
   };
 
   function normalizeFontSize(value) {
+    if (value === FONT_SIZE_28 || value === 28) {
+      return FONT_SIZE_28;
+    }
     if (value === FONT_SIZE_24 || value === 24) {
       return FONT_SIZE_24;
     }
@@ -200,6 +206,7 @@
     FONT_SIZE_14: FONT_SIZE_14,
     FONT_SIZE_18: FONT_SIZE_18,
     FONT_SIZE_24: FONT_SIZE_24,
+    FONT_SIZE_28: FONT_SIZE_28,
     DEFAULT_FONT_SIZE: DEFAULT_FONT_SIZE,
     DEFAULT_BOLD: DEFAULT_BOLD,
     PAGE_CHAR_LIMITS: PAGE_CHAR_LIMITS,

@@ -21,6 +21,17 @@ function memoryStorage(initial) {
 assert.deepStrictEqual(Settings.normalizeSettings(null), { fontSize: "18", bold: true });
 assert.strictEqual(Settings.DEFAULT_FONT_SIZE, Settings.FONT_SIZE_18);
 assert.strictEqual(Settings.DEFAULT_BOLD, true);
+[28, "28"].forEach(function(size) {
+  [false, true].forEach(function(bold) {
+    var settings = { fontSize: size, bold: bold };
+    var stored = memoryStorage();
+    Settings.saveSettings(settings, stored);
+    assert.deepStrictEqual(Settings.loadSettings(stored), { fontSize: "28", bold: bold });
+    assert.deepStrictEqual(Settings.parseConfigPageResponse(JSON.stringify(settings)), { fontSize: "28", bold: bold });
+    assert.strictEqual(Settings.profileKey(settings), bold ? "28b" : "28r");
+    assert.strictEqual(Settings.pageCharLimit(settings), bold ? 100 : 110);
+  });
+});
 assert.deepStrictEqual(
   Settings.normalizeSettings({ fontSize: "large" }),
   { fontSize: "18", bold: true },
@@ -81,6 +92,8 @@ assert.strictEqual(Settings.parseConfigPageResponse("CANCELLED"), null);
 
 [
   ["src/config/index.html", "docs/config/index.html"],
+  ["src/config/preview.js", "docs/config/preview.js"],
+  ["src/config/preview-fonts.js", "docs/config/preview-fonts.js"],
   ["src/config/app.js", "docs/config/app.js"],
   ["src/config/style.css", "docs/config/style.css"],
   ["src/common/settings.js", "docs/config/settings.js"],
