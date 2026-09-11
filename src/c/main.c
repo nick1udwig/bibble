@@ -555,16 +555,51 @@ static void prv_update_header_time(void) {
   }
 }
 
+// Fit the complete reference before handing it to TextLayer: its trailing
+// ellipsis otherwise removes the chapter number along with the book name.
+static void prv_fit_chapter_header(char *dest, size_t dest_size, const char *name,
+                                   uint8_t chapter, TextLayer *label) {
+  snprintf(dest, dest_size, "%s %u", name, chapter);
+  if (!label) return;
+  int16_t width = layer_get_bounds(text_layer_get_layer(label)).size.w - 2;
+#if defined(PBL_ROUND)
+  // The reference sits on the second header line. Reserve the narrowest
+  // chord used by its compact Gothic 14 Bold glyphs, plus the flow inset.
+  int16_t radius = width / 2;
+  int16_t distance = radius - (BIBBLE_ROUND_HEADER_LABEL_Y + 3);
+  int16_t half_chord = radius;
+  while (half_chord * half_chord + distance * distance > radius * radius) half_chord--;
+  width = half_chord * 2 - BIBBLE_ROUND_TEXT_FLOW_INSET * 2;
+#endif
+  GFont font = prv_header_font();
+  GRect measure = GRect(0, 0, 1000, 100);
+  if (graphics_text_layout_get_content_size(dest, font, measure,
+        GTextOverflowModeWordWrap, GTextAlignmentLeft).w <= width) return;
+  for (int length = (int)strlen(name) - 1; length > 0; length--) {
+    snprintf(dest, dest_size, "%.*s.. %u", length, name, chapter);
+    if (graphics_text_layout_get_content_size(dest, font, measure,
+          GTextOverflowModeWordWrap, GTextAlignmentLeft).w <= width) return;
+  }
+  snprintf(dest, dest_size, "%u", chapter);
+}
+
 static void prv_restore_reader_header(void) {
 #if defined(PBL_ROUND)
   if (s_current_book < BIBBLE_BOOK_COUNT) {
-    snprintf(s_reader_reference, sizeof(s_reader_reference), "%s %u",
-             BIBBLE_BOOK_SHORT_NAMES[s_current_book], s_current_chapter);
+    prv_fit_chapter_header(s_reader_reference, sizeof(s_reader_reference),
+                           BIBBLE_BOOK_SHORT_NAMES[s_current_book], s_current_chapter,
+                           s_reader_reference_layer);
   } else {
     prv_copy_string(s_reader_reference, sizeof(s_reader_reference), s_current_reference);
   }
 #else
-  prv_copy_string(s_reader_reference, sizeof(s_reader_reference), s_current_reference);
+  if (s_current_book < BIBBLE_BOOK_COUNT) {
+    prv_fit_chapter_header(s_reader_reference, sizeof(s_reader_reference),
+                           BIBBLE_BOOK_NAMES[s_current_book], s_current_chapter,
+                           s_reader_reference_layer);
+  } else {
+    prv_copy_string(s_reader_reference, sizeof(s_reader_reference), s_current_reference);
+  }
 #endif
 
   if (s_reader_reference_layer) {
@@ -601,8 +636,9 @@ static void prv_format_chapter_status(void) {
 static void prv_format_verse_status(void) {
   if (s_selected_book < BIBBLE_BOOK_COUNT && s_selected_chapter >= 1 &&
       s_selected_chapter <= prv_chapter_count(s_selected_book)) {
-    snprintf(s_verse_status, sizeof(s_verse_status), "%s %u", BIBBLE_BOOK_NAMES[s_selected_book],
-             s_selected_chapter);
+    prv_fit_chapter_header(s_verse_status, sizeof(s_verse_status),
+                           BIBBLE_BOOK_NAMES[s_selected_book], s_selected_chapter,
+                           s_verse_status_layer);
   } else {
     prv_copy_string(s_verse_status, sizeof(s_verse_status), "Select a verse");
   }
@@ -2112,6 +2148,7 @@ static void prv_relayout_for_font_profile(void) {
     prv_search_reload();
   }
 
+  prv_update_status_layers();
   prv_relayout_header(s_reader_window, s_reader_header_layer, s_reader_reference_layer,
                       s_reader_time_layer);
   if (!s_reader_window || !s_reader_scroll_layer || !s_reader_body_layer) {
