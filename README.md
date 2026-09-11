@@ -46,3 +46,21 @@ The watch keeps an eight-entry LRU page cache and prefetches an asymmetric readi
 Holding Select starts dictation.
 Spoken Bible references still navigate directly; other phrases search the full KJV.
 Search results arrive five at a time, show a verse reference and compact excerpt with matching terms in bold, and open the selected verse when tapped or selected.
+
+## Knowledge base
+
+We use [GitKB](https://gitkb.com/) to retain project requirements and decisions. Agents should start with [AGENTS.md](AGENTS.md); the final reading and typography requirements live in `specs/reading-and-typography`.
+
+[Install the GitKB CLI](https://gitkb.com/docs/getting-started/installation/) on macOS/Linux:
+
+```sh
+curl -fsSL https://get.gitkb.com/install.sh | bash
+```
+
+Then, from a fresh clone with the CLI on your PATH, set up this repository's KB in one line:
+
+```sh
+git-kb restore .kb/backups/bootstrap.json && git-kb code index --index-only src scripts tests docs wscript
+```
+
+Git tracks the KB configuration, agent instructions, and portable backup in `.kb/backups/bootstrap.json`, so these travel with the repository on GitHub. The working KB store, caches, and editing workspaces remain local and ignored. GitKB has its own commit history; after updating it, refresh the backup before committing the corresponding Git changes. See [.kb/README.md](.kb/README.md) for details. Restore is for a fresh/empty KB, not for overwriting newer local work.

@@ -2,3 +2,10 @@ build/
 node_modules/
 *.pbw
 .lock-waf*
+
+# GitKB
+.kb/.cache/
+.kb/store/
+.kb/workspace/
+.kb/workspaces/
+.kb/config.toml.identity.lock
