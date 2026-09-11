@@ -1311,7 +1311,7 @@ static const char *prv_grid_item_label(BibbleGridKind kind, uint16_t index, char
 
 static void prv_grid_draw(BibbleGridKind kind, Layer *layer, GContext *ctx) {
   GRect bounds = layer_get_bounds(layer);
-  GFont font = prv_grid_font();
+  GFont font = kind == BibbleGridKindBook ? prv_selected_font() : prv_grid_font();
   int16_t cell_height = prv_grid_cell_height();
   uint16_t count = prv_grid_item_count(kind);
   uint16_t selected = prv_grid_selected_index(kind);
